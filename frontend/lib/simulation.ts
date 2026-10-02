@@ -1,7 +1,7 @@
 import { ExerciseState, AARReportData, SimulationEventLog } from "../types/exercise";
 import { Scenario, ScenarioEvent } from "../types/scenario";
-import { RadioMessage } from "../types/communication";
-import { Decision } from "../types/decision";
+import { RadioMessage, MessageSenderRole, MessageType, DeliveryStatus } from "../types/communication";
+import { DecisionRecord, DecisionPoint } from "../types/decision";
 import { getDemoScenario } from "../data/demoScenario";
 import { formatSimTime } from "./utils";
 
@@ -10,7 +10,6 @@ export class LocalSimulationEngine {
   private scenario: Scenario;
   private timerId: NodeJS.Timeout | null = null;
   private listeners: Set<(state: ExerciseState) => void> = new Set();
-  private delayedMessageQueue: Array<{ message: RadioMessage; deliverIn: number }> = [];
   private triggeredEventIds: Set<string> = new Set();
   private startTimestamp: number = Date.now();
 
@@ -34,6 +33,8 @@ export class LocalSimulationEngine {
       speedMultiplier: 1.0,
       commsStatus: "normal",
       radioDelaySeconds: 0,
+      messageLossPercentage: 0,
+      allowIncompleteReports: false,
       mapStatus: "current",
       mapLastUpdated: "Live Telemetry Active",
       units: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
@@ -55,8 +56,9 @@ export class LocalSimulationEngine {
       ],
       unavailableInformation: [],
       messages: [],
+      pendingMessages: [],
       decisions: [],
-      decisionRequired: null,
+      activeDecisionPoint: null,
       eventLog: [
         {
           id: "log-init",
@@ -142,7 +144,6 @@ export class LocalSimulationEngine {
     const demo = isDemo !== undefined ? isDemo : this.state.isDemo;
     this.scenario = getDemoScenario(demo);
     this.triggeredEventIds.clear();
-    this.delayedMessageQueue = [];
     this.startTimestamp = Date.now();
     this.state = this.createInitialState(this.state.exerciseId, demo);
     this.notify();
@@ -172,19 +173,8 @@ export class LocalSimulationEngine {
       Math.round((this.state.elapsedSeconds / Math.max(1, this.state.totalDuration)) * 100)
     );
 
-    // Advance true units along road/patrol
-    if (this.state.trueUnits) {
-      for (const u of this.state.trueUnits) {
-        if (u.id === "unit-alpha" && u.x < 520) {
-          u.x += 0.8 * effectiveDelta;
-          u.y -= 0.3 * effectiveDelta;
-        } else if (u.id === "unit-bravo" && u.x < 450) {
-          u.x += 0.5 * effectiveDelta;
-          u.y -= 0.35 * effectiveDelta;
-        }
-      }
-    }
-
+    // Units only move via explicit scenario events now.
+    
     // Mirror to display units unless map is outdated
     if (this.state.mapStatus === "current" && this.state.trueUnits) {
       this.state.units = JSON.parse(JSON.stringify(this.state.trueUnits));
@@ -195,21 +185,28 @@ export class LocalSimulationEngine {
       this.state.mapLastUpdated = `Last updated: ${staleMins}m ${staleSecs}s ago (STALE)`;
     }
 
-    // Process delayed message queue
-    const remainingQueue: Array<{ message: RadioMessage; deliverIn: number }> = [];
-    for (const item of this.delayedMessageQueue) {
-      item.deliverIn -= effectiveDelta;
-      if (item.deliverIn <= 0) {
-        item.message.status = "delivered";
-        item.message.delayRemaining = 0;
-        this.state.messages.push(item.message);
-        this.logEvent("Delayed Message Delivered", `From ${item.message.sender}: ${item.message.content.substring(0, 35)}...`, "comms");
+    // Process pending messages (Phase 4)
+    const remainingPending: RadioMessage[] = [];
+    for (const msg of this.state.pendingMessages) {
+      if (msg.delayRemaining !== undefined) {
+        msg.delayRemaining -= effectiveDelta;
+        if (msg.delayRemaining <= 0) {
+          msg.status = "delivered";
+          msg.deliveryStatus = "DELIVERED";
+          msg.delayRemaining = 0;
+          msg.timestampDelivered = Date.now();
+          msg.formattedTimeDelivered = this.state.formattedTime;
+          this.state.messages.push(msg);
+          this.logEvent("Message Delivered", `From ${msg.sender}: ${msg.content.substring(0, 35)}...`, "comms", { messageId: msg.id });
+        } else {
+          remainingPending.push(msg);
+        }
       } else {
-        item.message.delayRemaining = Math.ceil(item.deliverIn);
-        remainingQueue.push(item);
+        // Fallback for safety, shouldn't happen if properly initialized
+        remainingPending.push(msg);
       }
     }
-    this.delayedMessageQueue = remainingQueue;
+    this.state.pendingMessages = remainingPending;
 
     // Check scenario timeline triggers
     for (const evt of this.scenario.events) {
@@ -238,183 +235,260 @@ export class LocalSimulationEngine {
       this.state.unavailableInformation = payload.unavailableInfo;
     }
 
-    if (evt.type === "comms_degradation") {
+    if (evt.type === "UNIT_MOVE" || evt.type === "CONTACT_DETECTED" || evt.type === "STATUS_CHANGE") {
+      if (payload.targetUnitId && this.state.trueUnits) {
+        const unit = this.state.trueUnits.find(u => u.id === payload.targetUnitId);
+        if (unit) {
+          if (payload.x !== undefined) unit.x = payload.x as number;
+          if (payload.y !== undefined) unit.y = payload.y as number;
+          if (payload.heading !== undefined) unit.heading = payload.heading as number;
+          if (payload.status !== undefined) unit.status = payload.status as any;
+          if (payload.faction !== undefined) unit.faction = payload.faction as any;
+          if (payload.communicationStatus !== undefined) unit.communicationStatus = payload.communicationStatus as any;
+        }
+      }
+    } else if (evt.type === "INTEL_REPORT") {
+      const sender = payload.sender || "UAV REPORT";
+      const role = payload.senderRole || "INTELLIGENCE";
+      const content = payload.content || "Emergent intelligence update received.";
+      // Route INTEL_REPORT through Phase 4 comms logic
+      this.generateMessage(sender, role, content, "INTEL_REPORT");
+    } else if (evt.type === "CONFLICTING_REPORT") {
+      if (payload.reports) {
+        // Phase 4: Conflicting reports
+        const groupId = Math.random().toString(36).substring(2, 9);
+        for (const rep of payload.reports) {
+          this.generateMessage(rep.source, rep.senderRole, rep.content, "CONFLICTING_REPORT", true, groupId);
+        }
+      }
+    } else if (evt.type === "comms_degradation") {
       if (payload.commsStatus) {
-        this.state.commsStatus = payload.commsStatus;
-        this.state.radioDelaySeconds = payload.radioDelaySeconds || 0;
+        this.state.commsStatus = payload.commsStatus as any;
+        this.state.radioDelaySeconds = Number(payload.radioDelaySeconds) || 0;
+        this.state.messageLossPercentage = Number(payload.messageLossPercentage) || 0;
+        this.state.allowIncompleteReports = !!payload.allowIncompleteReports;
       }
       if (payload.broadcastMessage) {
         const bm = payload.broadcastMessage;
-        this.injectIncomingMessage(bm.sender, bm.senderRole, bm.content);
+        // Broadcasts from instructor/system often bypass degradation, but we'll use normal generateMessage for realism unless it's a SYSTEM message
+        this.generateMessage(bm.sender, bm.senderRole, bm.content, "SYSTEM");
       }
-    } else if (evt.type === "conflicting_report") {
-      if (payload.reports) {
-        for (const rep of payload.reports) {
-          this.injectIncomingMessage(rep.source, rep.senderRole, rep.content);
-        }
-      }
-      // Add visual contact markers
-      this.state.activityMarkers.push({
-        id: "act-conflict-west",
-        label: "Alpha Scout Contact: Western Ridge",
-        x: 260,
-        y: 210,
-        type: "contact_warning",
-        status: "unverified"
-      });
-      this.state.activityMarkers.push({
-        id: "act-conflict-east",
-        label: "SIGINT Triangulation: Eastern Canyon",
-        x: 710,
-        y: 320,
-        type: "contact_warning",
-        status: "unverified"
-      });
     } else if (evt.type === "map_status") {
       if (payload.mapStatus) {
-        this.state.mapStatus = payload.mapStatus;
+        this.state.mapStatus = payload.mapStatus as any;
         this.state.mapLastUpdated = "Last updated: 3 minutes ago (STALE)";
       }
-    } else if (evt.type === "intel_update") {
-      const sender = payload.sender || "INTELLIGENCE";
-      const role = payload.senderRole || "INTELLIGENCE";
-      const content = payload.content || "Emergent intelligence update received.";
-      this.injectIncomingMessage(sender, role, content);
-      this.state.activityMarkers.push({
-        id: "act-jammer",
-        label: "Hostile Mobile Jammer (EW)",
-        x: 560,
-        y: 180,
-        type: "hostile_jammer",
-        status: "high_threat"
-      });
     } else if (evt.type === "decision_point") {
-      this.state.decisionRequired = {
-        eventId: evt.id,
-        prompt: payload.prompt || "Commander Decision Required",
-        options: payload.options || [],
-        timestamp: this.state.formattedTime,
-        simulationSecond: this.state.elapsedSeconds
+      this.state.activeDecisionPoint = {
+        id: evt.id,
+        title: payload.title as string || "Commander Decision Required",
+        situation: payload.prompt as string || payload.situation as string || "Situation unclear.",
+        availableActions: (payload.options as any[]) || [],
+        status: "active",
+        timestamp: Date.now(),
+        simulationSecond: this.state.elapsedSeconds,
+        relatedSector: payload.relatedSector as string,
+        relatedUnits: payload.relatedUnits as string[]
       };
+      
+      // Check if we need to pause
+      if (payload.pauseOnDecision) {
+        this.pause();
+      }
     }
   }
 
-  public injectIncomingMessage(sender: string, senderRole: string, content: string) {
-    const msg: RadioMessage = {
-      id: Math.random().toString(36).substring(2, 9),
-      exerciseId: this.state.exerciseId,
-      sender,
-      senderRole,
-      content,
-      timestamp: Date.now(),
-      formattedTime: this.state.formattedTime,
-      status: "delivered"
-    };
-    this.state.messages.push(msg);
-    this.notify();
-  }
-
-  public sendRadioMessage(sender: string, role: string, content: string): RadioMessage {
+  // Phase 4 Core Communication Engine
+  public generateMessage(
+    sender: string, 
+    senderRole: string, 
+    content: string, 
+    messageType: MessageType = "UNIT_REPORT",
+    isConflicting: boolean = false,
+    conflictGroupId?: string
+  ): RadioMessage {
     const msgId = Math.random().toString(36).substring(2, 9);
-
-    if (this.state.commsStatus === "offline") {
-      const droppedMsg: RadioMessage = {
-        id: msgId,
-        exerciseId: this.state.exerciseId,
-        sender,
-        senderRole: role,
-        content: `[SIGNAL LOST] ${content}`,
-        timestamp: Date.now(),
-        formattedTime: this.state.formattedTime,
-        status: "dropped"
-      };
-      this.state.messages.push(droppedMsg);
-      this.logEvent("Message Dropped (Radio Offline)", `Attempted from ${sender}: ${content.substring(0, 30)}...`, "comms");
-      this.notify();
-      return droppedMsg;
+    let finalContent = content;
+    
+    // 1. Process Incomplete Reports (Degraded State)
+    if (this.state.commsStatus === "degraded" && this.state.allowIncompleteReports && messageType !== "SYSTEM") {
+      // Simulate static/garbled text by replacing random words with [GARBLED] or UNKNOWN
+      // A simple deterministic approach: replace numbers with UNKNOWN
+      if (content.match(/\b\d+\b/g)) {
+        finalContent = content.replace(/\b\d+\b/g, "UNKNOWN");
+      } else {
+        // If no numbers, just randomly garble some words for effect, deterministically based on length
+        const words = content.split(" ");
+        if (words.length > 3) {
+           words[Math.floor(words.length / 2)] = "[STATIC]";
+           finalContent = words.join(" ");
+        }
+      }
     }
 
-    if (this.state.commsStatus === "delayed") {
-      const delay = this.state.radioDelaySeconds || 8;
-      const delayedMsg: RadioMessage = {
-        id: msgId,
-        exerciseId: this.state.exerciseId,
-        sender,
-        senderRole: role,
-        content,
-        timestamp: Date.now(),
-        formattedTime: this.state.formattedTime,
-        status: "delayed",
-        delayRemaining: delay
-      };
-      this.delayedMessageQueue.push({
-        message: delayedMsg,
-        deliverIn: delay
-      });
-      this.logEvent("Message Queued (Radio Delayed)", `From ${sender} with ${delay}s propagation latency`, "comms");
-      this.notify();
-      return delayedMsg;
-    }
-
-    // Normal delivery
-    const normalMsg: RadioMessage = {
+    const baseMsg: RadioMessage = {
       id: msgId,
       exerciseId: this.state.exerciseId,
       sender,
-      senderRole: role,
-      content,
+      senderRole,
+      content: finalContent,
+      originalContent: content,
+      messageType,
       timestamp: Date.now(),
+      timestampGenerated: Date.now(),
       formattedTime: this.state.formattedTime,
-      status: "delivered"
+      status: "sent",
+      deliveryStatus: "PENDING",
+      communicationState: this.state.commsStatus,
+      isConflicting,
+      conflictGroupId
     };
-    this.state.messages.push(normalMsg);
+
+    // Instructor/System messages usually bypass degradation to ensure trainee knows what's going on
+    if (messageType === "SYSTEM" || senderRole === "INSTRUCTOR" || senderRole === "COMMANDER") {
+       // Commander (Trainee) outbound messages still experience drop/delay in real life, but for now we'll route them normally, 
+       // actually the requirement says: "When communication state is LOST: Messages generated by affected units should not be delivered."
+       // If Commander sends a message while LOST, it should drop.
+    }
+
+    // 2. Process Message Loss (Offline or Degraded with loss)
+    if (this.state.commsStatus === "offline" || (this.state.commsStatus === "degraded" && Math.random() * 100 < this.state.messageLossPercentage)) {
+      baseMsg.status = "dropped";
+      baseMsg.deliveryStatus = "DROPPED";
+      baseMsg.content = `[SIGNAL LOST] ${baseMsg.content}`;
+      this.state.messages.push(baseMsg);
+      this.logEvent("Message Dropped", `Generated by ${sender} but dropped due to comms degradation.`, "comms", { messageId: msgId });
+      this.notify();
+      return baseMsg;
+    }
+
+    // 3. Process Message Delay (Delayed or Degraded)
+    if (this.state.commsStatus === "delayed" || this.state.commsStatus === "degraded") {
+      const delay = this.state.radioDelaySeconds || 8;
+      baseMsg.status = "delayed";
+      baseMsg.deliveryStatus = "DELAYED";
+      baseMsg.delayRemaining = delay;
+      this.state.pendingMessages.push(baseMsg);
+      this.logEvent("Message Queued", `Generated by ${sender}, delayed by ${delay}s`, "comms", { messageId: msgId });
+      this.notify();
+      return baseMsg;
+    }
+
+    // 4. Normal Delivery
+    baseMsg.status = "delivered";
+    baseMsg.deliveryStatus = "DELIVERED";
+    baseMsg.timestampDelivered = Date.now();
+    baseMsg.formattedTimeDelivered = this.state.formattedTime;
+    this.state.messages.push(baseMsg);
     this.notify();
-    return normalMsg;
+    return baseMsg;
   }
 
-  public submitDecision(decisionText: string, rationale: string, confidence: "low" | "medium" | "high", traineeId: string = "COMMANDER_1"): Decision {
-    const dec: Decision = {
+  // Legacy compat wrapper for trainees (e.g. from RadioPanel)
+  public sendRadioMessage(sender: string, role: string, content: string): RadioMessage {
+    return this.generateMessage(sender, role, content, "COMMAND");
+  }
+
+  // Legacy compat wrapper for old injects
+  public injectIncomingMessage(sender: string, senderRole: string, content: string) {
+    this.generateMessage(sender, senderRole, content, "SYSTEM");
+  }
+
+  public submitDecision(decisionText: string, rationale: string, confidence: "low" | "medium" | "high", traineeId: string = "COMMANDER_1", actionId?: string): DecisionRecord {
+    const point = this.state.activeDecisionPoint;
+    const actionLabel = point?.availableActions.find(a => a.id === actionId)?.label || decisionText;
+    
+    const dec: DecisionRecord = {
       id: Math.random().toString(36).substring(2, 9),
       exerciseId: this.state.exerciseId,
       traineeId,
-      decision: decisionText,
-      rationale,
-      confidence,
-      timestamp: Date.now(),
-      simulationTime: this.state.formattedTime,
-      simulationSecond: Math.floor(this.state.elapsedSeconds),
-      availableInformation: [...this.state.availableInformation],
-      unavailableInformation: [...this.state.unavailableInformation]
+      decisionPointId: point?.id || "unknown",
+      selectedActionId: actionId || "custom",
+      selectedActionLabel: actionLabel,
+      decision: decisionText, // legacy
+      rationale, // legacy
+      confidence, // legacy
+      realTimestamp: Date.now(),
+      scenarioTimestamp: Math.floor(this.state.elapsedSeconds),
+      communicationState: this.state.commsStatus,
+      simulationTime: this.state.formattedTime, // legacy
+      availableInformation: [...this.state.availableInformation], // legacy
+      unavailableInformation: [...this.state.unavailableInformation], // legacy
+      relatedSector: point?.relatedSector,
+      relatedUnits: point?.relatedUnits
     };
 
     this.state.decisions.push(dec);
-    this.state.decisionRequired = null;
-    this.logEvent("Commander Decision Submitted", `Action: ${decisionText} | Confidence: ${confidence.toUpperCase()}`, "decision", {
-      decision: decisionText,
+    this.state.activeDecisionPoint = null;
+    
+    // Process consequence
+    const selectedAction = point?.availableActions.find(a => a.id === actionId);
+    if (selectedAction?.consequence) {
+      this.processDecisionConsequence(selectedAction.consequence);
+    }
+    
+    this.logEvent("Commander Decision Submitted", `Action: ${actionLabel}`, "decision", {
+      actionId,
+      actionLabel,
       rationale,
       confidence
     });
     this.notify();
+    
+    // Automatically resume if we were paused for this decision
+    // Usually scenarios will resume automatically if they were paused
+    if (this.state.status === "paused") {
+       // Only if explicitly instructed, but normally user resumes manually. We can leave it manual or auto.
+       // Let's assume manual or if explicitly paused by event, we resume.
+    }
+    
     return dec;
+  }
+  
+  private processDecisionConsequence(consequence: Record<string, unknown>) {
+    if (consequence.type === "schedule_event") {
+       if (consequence.eventPayload) {
+          const payload = consequence.eventPayload as any;
+          if (payload.type === "STATUS_CHANGE" && payload.targetUnitId && this.state.trueUnits) {
+             const unit = this.state.trueUnits.find(u => u.id === payload.targetUnitId);
+             if (unit && payload.status) {
+               unit.status = payload.status;
+               this.logEvent("Unit Status Changed", `Unit status changed to ${unit.status}`, "STATUS_CHANGE", { targetUnitId: unit.id, status: unit.status });
+             }
+          }
+       }
+    } else if (consequence.type === "move_unit") {
+       if (this.state.trueUnits) {
+         const unit = this.state.trueUnits.find(u => u.id === consequence.targetUnitId);
+         if (unit) {
+            if (consequence.sector) unit.sector = consequence.sector as string;
+            if (consequence.status) unit.status = consequence.status as any;
+            if (consequence.x !== undefined) unit.x = consequence.x as number;
+            if (consequence.y !== undefined) unit.y = consequence.y as number;
+            
+            this.logEvent("Unit Moved (Decision Consequence)", `Unit ${unit.name} moving based on commander order`, "UNIT_MOVE", {
+              targetUnitId: unit.id,
+              sector: unit.sector,
+              status: unit.status,
+              x: unit.x,
+              y: unit.y
+            });
+         }
+       }
+    }
   }
 
   public applyInstructorInject(action: string, payload?: Record<string, unknown>) {
-    if (action === "delay_radio") {
-      this.state.commsStatus = "delayed";
-      this.state.radioDelaySeconds = Number(payload?.delay || 10);
-      this.logEvent("Instructor Inject: Delay Radio", `Forced radio latency to ${this.state.radioDelaySeconds}s`, "instructor");
-    } else if (action === "drop_radio") {
-      this.state.commsStatus = "offline";
-      this.state.radioDelaySeconds = 9999;
-      this.logEvent("Instructor Inject: Drop Radio", "Tactical net forced offline", "instructor");
-    } else if (action === "restore_radio") {
-      this.state.commsStatus = "normal";
-      this.state.radioDelaySeconds = 0;
-      this.logEvent("Instructor Inject: Restore Radio", "Tactical net restored to normal", "instructor");
+    if (action === "set_comms") {
+      this.state.commsStatus = (payload?.status as any) || "normal";
+      this.state.radioDelaySeconds = Number(payload?.delay || 0);
+      this.state.messageLossPercentage = Number(payload?.loss || 0);
+      this.state.allowIncompleteReports = !!payload?.incomplete;
+      this.logEvent("Instructor Inject: Comms State", `Forced comms to ${this.state.commsStatus}`, "instructor");
     } else if (action === "conflicting_report") {
-      this.injectIncomingMessage("Team Alpha Lead", "TEAM_ALPHA", "URGENT: Hostile movement sighted near Sector 2 tree-line!");
-      this.injectIncomingMessage("SIGINT Remote", "INTELLIGENCE", "ADVISORY: Acoustic arrays indicate Sector 2 clear; activity concentrated near Sector 5.");
-      this.logEvent("Instructor Inject: Conflicting SITREPs", "Dispatched contradictory intelligence feeds", "instructor");
+       this.generateMessage("Team Alpha Lead", "TEAM_ALPHA", "URGENT: Hostile movement sighted near Sector 2 tree-line!", "CONFLICTING_REPORT", true, "grp1");
+       this.generateMessage("SIGINT Remote", "INTELLIGENCE", "ADVISORY: Acoustic arrays indicate Sector 2 clear; activity concentrated near Sector 5.", "CONFLICTING_REPORT", true, "grp1");
+       this.logEvent("Instructor Inject: Conflicting SITREPs", "Dispatched contradictory intelligence feeds", "instructor");
     } else if (action === "outdate_map") {
       this.state.mapStatus = "outdated";
       this.state.mapLastUpdated = "Last updated: 3 minutes ago (STALE)";
@@ -423,17 +497,59 @@ export class LocalSimulationEngine {
       this.state.mapStatus = "current";
       this.state.mapLastUpdated = "Live Telemetry Active";
       this.logEvent("Instructor Inject: Restore Map", "GPS feed re-synchronized", "instructor");
-    } else if (action === "new_intelligence") {
-      this.injectIncomingMessage("HIGH_COMMAND_RELAY", "INTELLIGENCE", "FLASH: High-power mobile electronic warfare emitter located at Choke Point Bravo.");
-      this.logEvent("Instructor Inject: New Intel", "Acoustic EW intercept broadcasted", "instructor");
+    } else if (action === "intel_report") {
+      this.generateMessage(
+        String(payload?.source || "Instructor"),
+        String(payload?.senderRole || "INTELLIGENCE"),
+        String(payload?.message || "Intel Report"),
+        "INTEL_REPORT",
+        true
+      );
+      this.logEvent("Instructor Inject: Intel Report", `Source: ${payload?.source}`, "instructor");
+    } else if (action === "move_unit") {
+      const unit = this.state.units.find(u => u.id === payload?.targetUnitId);
+      if (unit) {
+        unit.sector = payload?.sector as string || unit.sector;
+        this.logEvent("Instructor Inject: Move Unit", `Moved ${unit.name} to ${unit.sector}`, "instructor");
+      }
+    } else if (action === "change_status") {
+      const unit = this.state.units.find(u => u.id === payload?.targetUnitId);
+      if (unit) {
+        unit.status = payload?.status as any || unit.status;
+        this.logEvent("Instructor Inject: Change Status", `Status of ${unit.name} set to ${unit.status}`, "instructor");
+      }
+    } else if (action === "detect_contact" || action === "activate_contact") {
+      const contactId = payload?.targetContactId as string;
+      const contact = this.state.units.find(u => u.id === contactId);
+      if (contact) {
+        contact.sector = payload?.sector as string || contact.sector;
+        contact.faction = action === "activate_contact" ? "hostile" : "unknown";
+        this.logEvent(`Instructor Inject: ${action}`, `Contact ${contact.name} in ${contact.sector} set to ${contact.faction}`, "instructor");
+      }
+    } else if (action === "change_objective") {
+      const title = payload?.title as string || "New Objective";
+      const desc = payload?.description as string || "";
+      this.logEvent("Instructor Inject: Change Objective", `Objective updated: ${title} - ${desc}`, "instructor");
+      this.generateMessage("HQ Command", "HQ", `NEW OBJECTIVE: ${title}. ${desc}`, "SYSTEM", true);
+    } else if (action === "decision_point") {
+      this.state.activeDecisionPoint = {
+        id: "instructor-decision-" + Date.now(),
+        title: String(payload?.title || "Commander Decision Required"),
+        situation: String(payload?.prompt || "Situation requires immediate decision."),
+        availableActions: (payload?.options as any) || [],
+        status: "active",
+        timestamp: Date.now(),
+        simulationSecond: this.state.elapsedSeconds
+      };
+      this.logEvent("Instructor Inject: Decision Point", `Forced decision point: ${payload?.title}`, "instructor");
     }
     this.notify();
   }
 
   public generateAAR(): AARReportData {
-    const deliveredCount = this.state.messages.filter((m) => m.status === "delivered").length;
-    const delayedCount = this.state.messages.filter((m) => m.status === "delayed").length;
-    const droppedCount = this.state.messages.filter((m) => m.status === "dropped").length;
+    const deliveredCount = this.state.messages.filter((m) => m.deliveryStatus === "DELIVERED").length;
+    const delayedCount = this.state.messages.filter((m) => m.deliveryStatus === "DELAYED").length + this.state.pendingMessages.length;
+    const droppedCount = this.state.messages.filter((m) => m.deliveryStatus === "DROPPED").length;
 
     const findings: string[] = [];
     if (this.state.commsStatus !== "normal") {
@@ -459,11 +575,14 @@ export class LocalSimulationEngine {
         description: l.description,
         category: l.category
       })),
+      fullEventLog: [...this.state.eventLog],
       decisions: this.state.decisions,
       messages: this.state.messages,
+      pendingMessages: this.state.pendingMessages,
+      initialUnits: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       stats: {
         duration: this.state.formattedTime,
-        messagesTotal: this.state.messages.length,
+        messagesTotal: this.state.messages.length + this.state.pendingMessages.length,
         messagesDelivered: deliveredCount,
         messagesDelayed: delayedCount,
         messagesDropped: droppedCount,
@@ -481,7 +600,6 @@ export class LocalSimulationEngine {
   }
 }
 
-// Global singleton instance for local simulation across pages
 let globalSimulationEngine: LocalSimulationEngine | null = null;
 
 export function getSimulationEngine(exerciseId: string = "exercise-demo-1", isDemo: boolean = true): LocalSimulationEngine {

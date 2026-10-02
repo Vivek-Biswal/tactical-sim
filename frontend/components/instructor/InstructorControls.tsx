@@ -11,7 +11,8 @@ import {
   Pause,
   Square,
   RotateCcw,
-  Zap
+  Zap,
+  AlertOctagon
 } from "lucide-react";
 
 interface InstructorControlsProps {
@@ -43,59 +44,82 @@ export const InstructorControls: React.FC<InstructorControlsProps> = ({
         <span className="text-[10px] text-slate-500">REAL-TIME OVERRIDE BUS</span>
       </div>
 
-      {/* Degradation Injects Grid */}
+      <div className="mb-4">
+        <div className="text-[10px] text-slate-500 font-bold mb-2">COMMUNICATION DEGRADATION CONTROLS</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* COMMS: NORMAL */}
+          <button
+            type="button"
+            onClick={() => onInject("set_comms", { status: "normal", delay: 0, loss: 0, incomplete: false })}
+            className={`p-2 rounded border text-left font-bold transition flex flex-col justify-between ${
+              commsStatus === "normal"
+                ? "bg-emerald-950 text-emerald-400 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                : "bg-slate-950 text-slate-400 border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300"
+            }`}
+          >
+            <div className="flex items-center space-x-1.5 mb-1">
+              <Radio className="w-3 h-3" />
+              <span>NORMAL</span>
+            </div>
+            <span className="text-[9px] font-normal opacity-70">0s delay, 0% loss</span>
+          </button>
+
+          {/* COMMS: DELAYED */}
+          <button
+            type="button"
+            onClick={() => onInject("set_comms", { status: "delayed", delay: 10, loss: 0, incomplete: false })}
+            className={`p-2 rounded border text-left font-bold transition flex flex-col justify-between ${
+              commsStatus === "delayed"
+                ? "bg-yellow-950 text-yellow-400 border-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.2)]"
+                : "bg-slate-950 text-slate-400 border-slate-800 hover:border-yellow-500/50 hover:text-yellow-300"
+            }`}
+          >
+            <div className="flex items-center space-x-1.5 mb-1">
+              <Clock className="w-3 h-3" />
+              <span>DELAYED</span>
+            </div>
+            <span className="text-[9px] font-normal opacity-70">+10s latency, full intact</span>
+          </button>
+
+          {/* COMMS: DEGRADED */}
+          <button
+            type="button"
+            onClick={() => onInject("set_comms", { status: "degraded", delay: 15, loss: 30, incomplete: true })}
+            className={`p-2 rounded border text-left font-bold transition flex flex-col justify-between ${
+              commsStatus === "degraded"
+                ? "bg-orange-950 text-orange-400 border-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.2)]"
+                : "bg-slate-950 text-slate-400 border-slate-800 hover:border-orange-500/50 hover:text-orange-300"
+            }`}
+          >
+            <div className="flex items-center space-x-1.5 mb-1">
+              <AlertOctagon className="w-3 h-3" />
+              <span>DEGRADED</span>
+            </div>
+            <span className="text-[9px] font-normal opacity-70">+15s delay, 30% loss, static</span>
+          </button>
+
+          {/* COMMS: LOST */}
+          <button
+            type="button"
+            onClick={() => onInject("set_comms", { status: "offline", delay: 0, loss: 100, incomplete: false })}
+            className={`p-2 rounded border text-left font-bold transition flex flex-col justify-between ${
+              commsStatus === "offline"
+                ? "bg-rose-950 text-rose-400 border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
+                : "bg-slate-950 text-slate-400 border-slate-800 hover:border-rose-500/50 hover:text-rose-300"
+            }`}
+          >
+            <div className="flex items-center space-x-1.5 mb-1">
+              <WifiOff className="w-3 h-3" />
+              <span>LOST</span>
+            </div>
+            <span className="text-[9px] font-normal opacity-70">Carrier severed (100% loss)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Scenario Events Injects Grid */}
+      <div className="text-[10px] text-slate-500 font-bold mb-2 mt-4">SCENARIO EVENTS</div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-4">
-        {/* DELAY RADIO */}
-        <button
-          type="button"
-          onClick={() => onInject(commsStatus === "delayed" ? "restore_radio" : "delay_radio", { delay: 10 })}
-          className={`p-2.5 rounded border text-left font-bold transition flex flex-col justify-between ${
-            commsStatus === "delayed"
-              ? "bg-amber-950 text-amber-300 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-              : "bg-slate-950 text-slate-300 border-slate-800 hover:border-amber-500/50"
-          }`}
-        >
-          <div className="flex items-center space-x-1.5 mb-1">
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>[ DELAY RADIO ]</span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-normal">
-            {commsStatus === "delayed" ? "Active (+10s delay)" : "Inject 10s packet latency"}
-          </span>
-        </button>
-
-        {/* DROP RADIO */}
-        <button
-          type="button"
-          onClick={() => onInject(commsStatus === "offline" ? "restore_radio" : "drop_radio")}
-          className={`p-2.5 rounded border text-left font-bold transition flex flex-col justify-between ${
-            commsStatus === "offline"
-              ? "bg-rose-950 text-rose-300 border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
-              : "bg-slate-950 text-slate-300 border-slate-800 hover:border-rose-500/50"
-          }`}
-        >
-          <div className="flex items-center space-x-1.5 mb-1">
-            <WifiOff className="w-3.5 h-3.5 text-rose-400" />
-            <span>[ DROP RADIO ]</span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-normal">
-            {commsStatus === "offline" ? "Carrier Jammed" : "Sever VHF carrier / drop net"}
-          </span>
-        </button>
-
-        {/* RESTORE RADIO */}
-        <button
-          type="button"
-          onClick={() => onInject("restore_radio")}
-          className="p-2.5 rounded border text-left font-bold transition flex flex-col justify-between bg-slate-950 text-emerald-400 border-slate-800 hover:border-emerald-500/50"
-        >
-          <div className="flex items-center space-x-1.5 mb-1">
-            <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            <span>[ RESTORE RADIO ]</span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-normal">Return radio net to normal</span>
-        </button>
-
         {/* CONFLICTING REPORT */}
         <button
           type="button"

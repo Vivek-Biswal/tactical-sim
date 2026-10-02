@@ -71,10 +71,10 @@ export const InformationState: React.FC<InformationStateProps> = ({ decisions, c
                 <span>INFORMATION AVAILABLE AT DECISION POINT</span>
               </div>
               <ul className="space-y-1">
-                {dec.availableInformation.length === 0 ? (
+                {(dec.availableInformation ?? []).length === 0 ? (
                   <li className="text-slate-500 italic text-[11px]">No verified telemetry.</li>
                 ) : (
-                  dec.availableInformation.map((item, i) => (
+                  (dec.availableInformation ?? []).map((item: string, i: number) => (
                     <li key={i} className="text-emerald-200/90 text-[11px] flex items-start space-x-1.5">
                       <span className="text-emerald-400 font-bold">✓</span>
                       <span>{item}</span>
@@ -91,10 +91,10 @@ export const InformationState: React.FC<InformationStateProps> = ({ decisions, c
                 <span>INFORMATION DENIED / UNAVAILABLE</span>
               </div>
               <ul className="space-y-1">
-                {dec.unavailableInformation.length === 0 ? (
+                {(dec.unavailableInformation ?? []).length === 0 ? (
                   <li className="text-slate-500 italic text-[11px]">None recorded.</li>
                 ) : (
-                  dec.unavailableInformation.map((item, i) => (
+                  (dec.unavailableInformation ?? []).map((item: string, i: number) => (
                     <li key={i} className="text-rose-200/90 text-[11px] flex items-start space-x-1.5">
                       <span className="text-rose-400 font-bold">✗</span>
                       <span>{item}</span>

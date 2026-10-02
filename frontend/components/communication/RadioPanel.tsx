@@ -6,6 +6,7 @@ import { Send, WifiOff, Clock, Radio, AlertOctagon } from "lucide-react";
 
 interface RadioPanelProps {
   messages: RadioMessage[];
+  pendingMessages?: RadioMessage[];
   commsStatus: CommsStatus;
   radioDelaySeconds?: number;
   userRole?: string;
@@ -16,6 +17,7 @@ interface RadioPanelProps {
 
 export const RadioPanel: React.FC<RadioPanelProps> = ({
   messages,
+  pendingMessages = [],
   commsStatus,
   radioDelaySeconds = 0,
   userRole = "COMMANDER",
@@ -27,6 +29,7 @@ export const RadioPanel: React.FC<RadioPanelProps> = ({
 
   const isOffline = commsStatus === "offline";
   const isDelayed = commsStatus === "delayed";
+  const isDegraded = commsStatus === "degraded";
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +65,24 @@ export const RadioPanel: React.FC<RadioPanelProps> = ({
             <span>LATENCY: +{radioDelaySeconds || 8}s</span>
           </div>
         )}
+        {isDegraded && (
+          <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-orange-950/80 border border-orange-500/60 text-orange-300 font-bold">
+            <AlertOctagon className="w-3.5 h-3.5 animate-pulse" />
+            <span>DEGRADED // LATENCY +{radioDelaySeconds || 8}s</span>
+          </div>
+        )}
       </div>
+
+      {/* Pending Messages Indicator */}
+      {pendingMessages.length > 0 && (
+        <div className="px-3 py-1 bg-amber-950/40 border-b border-amber-800/50 flex items-center justify-between text-[10px] font-mono">
+          <div className="flex items-center space-x-1.5 text-amber-400">
+            <Clock className="w-3 h-3 animate-spin" />
+            <span className="font-bold">{pendingMessages.length} MESSAGE{pendingMessages.length > 1 ? 'S' : ''} IN TRANSIT</span>
+          </div>
+          <span className="text-amber-500/60">Awaiting delivery...</span>
+        </div>
+      )}
 
       {/* Transmissions Log */}
       <div className="flex-1 p-2 min-h-[140px] max-h-[220px] overflow-hidden flex flex-col">
@@ -106,6 +126,8 @@ export const RadioPanel: React.FC<RadioPanelProps> = ({
           placeholder={
             isOffline
               ? "RADIO OFFLINE — Outbound packets will be dropped by electronic jamming..."
+              : isDegraded
+              ? `TRANSMISSION DEGRADED — Expect ${radioDelaySeconds || 8}s delay and potential data loss...`
               : isDelayed
               ? `Type radio transmission (will experience ${radioDelaySeconds || 8}s delay)...`
               : "Transmit tactical radio message..."
@@ -113,6 +135,8 @@ export const RadioPanel: React.FC<RadioPanelProps> = ({
           className={`flex-1 bg-slate-900 border rounded px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none transition ${
             isOffline
               ? "border-rose-900/60 focus:border-rose-500 text-rose-300"
+              : isDegraded
+              ? "border-amber-900/60 focus:border-amber-500 text-amber-100"
               : "border-slate-800 focus:border-cyan-500 text-slate-100"
           }`}
         />

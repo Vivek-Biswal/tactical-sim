@@ -112,16 +112,16 @@ export function useSimulationWebSocket({
   );
 
   const submitDecision = useCallback(
-    (decision: string, rationale: string, confidence: "low" | "medium" | "high") => {
+    (decision: string, rationale: string, confidence: "low" | "medium" | "high", actionId?: string) => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
             type: "decision_submit",
-            payload: { decision, rationale, confidence }
+            payload: { decision, rationale, confidence, actionId }
           })
         );
       } else {
-        localEngine.submitDecision(decision, rationale, confidence, name);
+        localEngine.submitDecision(decision, rationale, confidence, name, actionId);
       }
     },
     [name, localEngine]

@@ -4,7 +4,7 @@ import { TacticalUnit } from "../../types/scenario";
 interface TeamMarkerProps {
   unit: TacticalUnit;
   isSelected?: boolean;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
   isStale?: boolean;
 }
 
@@ -14,9 +14,12 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
   onClick,
   isStale = false
 }) => {
-  const isHostileOrObjective = unit.id === "objective-bravo";
+  const isObjective = unit.id === "objective-bravo";
+  const isHostile = unit.id.startsWith("contact");
 
-  const mainColor = isHostileOrObjective
+  const mainColor = isHostile
+    ? "#ef4444" // Hostile: Red
+    : isObjective
     ? "#f59e0b" // Objective: amber
     : isStale
     ? "#94a3b8" // Stale: muted gray
@@ -28,6 +31,7 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
       className="cursor-pointer transition-transform duration-500 ease-out select-none"
       onClick={onClick}
     >
+      <title>{`${unit.name} (${unit.type || unit.role})\nStatus: ${unit.status.toUpperCase()}`}</title>
       {/* Outer Glow / Ping */}
       <circle
         r={isSelected ? "22" : "16"}
@@ -64,8 +68,8 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
       />
 
       {/* NATO Friendly / Objective Glyph */}
-      {isHostileOrObjective ? (
-        // Waypoint Diamond
+      {(isHostile || isObjective) ? (
+        // Waypoint / Hostile Diamond
         <path d="M 0 -6 L 6 0 L 0 6 L -6 0 Z" fill={mainColor} />
       ) : (
         // Friendly Infantry / Recon Cross
