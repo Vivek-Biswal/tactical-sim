@@ -1,129 +1,107 @@
 import React, { useState } from "react";
-import { DecisionPrompt } from "../../types/decision";
+import { DecisionPoint } from "../../types/decision";
+import { CommsStatus } from "../../types/scenario";
+import { AlertTriangle, CheckCircle, Radio, Clock, ChevronRight } from "lucide-react";
 import { RationaleModal } from "./RationaleModal";
-import { AlertCircle, CheckCircle, ShieldAlert, ArrowRight, Compass } from "lucide-react";
 
 interface DecisionPanelProps {
-  decisionRequired?: DecisionPrompt | null;
-  onSubmitDecision: (decision: string, rationale: string, confidence: "low" | "medium" | "high") => void;
+  decisionPoint: DecisionPoint;
+  commsStatus: CommsStatus;
+  onSubmit: (actionId: string, actionLabel: string, rationale: string, confidence: "low" | "medium" | "high") => void;
   className?: string;
 }
 
 export const DecisionPanel: React.FC<DecisionPanelProps> = ({
-  decisionRequired,
-  onSubmitDecision,
+  decisionPoint,
+  commsStatus,
+  onSubmit,
   className = ""
 }) => {
-  const [selectedOptionText, setSelectedOptionText] = useState<string | null>(null);
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Default fallback options if custom decision initiated
-  const defaultOptions = [
-    {
-      id: "opt-1",
-      label: "Continue Current Route through Northern Defile",
-      description: "Maintain original schedule and advance along primary highway despite reports of hostile EW jammer."
-    },
-    {
-      id: "opt-2",
-      label: "Divert Route via Western Ridge Pass",
-      description: "Bypass suspected jammer vehicle, accept rough terrain delay and risk of Western patrol."
-    },
-    {
-      id: "opt-3",
-      label: "Halt and Establish Defensive Perimeter",
-      description: "Wait for communication recovery or courier contact before risking further advancement."
-    },
-    {
-      id: "opt-4",
-      label: "Dispatch Runner / Recon Scout toward Eastern Canyon",
-      description: "Seek direct visual confirmation before moving main force."
+  const getCommsDisplay = () => {
+    switch (commsStatus) {
+      case "normal": return <span className="text-emerald-400">NORMAL</span>;
+      case "delayed": return <span className="text-amber-400 animate-pulse">DELAYED</span>;
+      case "degraded": return <span className="text-orange-400 font-bold animate-pulse">DEGRADED</span>;
+      case "offline": return <span className="text-rose-400 font-bold animate-pulse">OFFLINE (LOST)</span>;
     }
-  ];
+  };
 
-  const currentPrompt = decisionRequired?.prompt || "Tactical Command Decision Options:";
-  const options = decisionRequired?.options && decisionRequired.options.length > 0
-    ? decisionRequired.options
-    : defaultOptions;
-
-  const handleSelectOption = (label: string) => {
-    setSelectedOptionText(label);
+  const handleActionSelect = (id: string) => {
+    setSelectedActionId(id);
     setIsModalOpen(true);
   };
 
   const handleModalSubmit = (rationale: string, confidence: "low" | "medium" | "high") => {
-    if (selectedOptionText) {
-      onSubmitDecision(selectedOptionText, rationale, confidence);
+    if (selectedActionId) {
+      const actionLabel = decisionPoint.availableActions.find(a => a.id === selectedActionId)?.label || "";
+      onSubmit(selectedActionId, actionLabel, rationale, confidence);
     }
     setIsModalOpen(false);
-    setSelectedOptionText(null);
   };
 
   return (
-    <div className={`bg-slate-900/90 border rounded-lg p-3 font-mono text-xs ${
-      decisionRequired ? "border-amber-500/70 shadow-[0_0_20px_rgba(245,158,11,0.2)]" : "border-slate-800"
-    } ${className}`}>
+    <div className={`bg-slate-900 border-2 border-amber-500/70 shadow-[0_0_20px_rgba(245,158,11,0.2)] rounded-lg overflow-hidden flex flex-col font-mono ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-2">
-          {decisionRequired ? (
-            <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600 font-bold animate-pulse">
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>DECISION REQUIRED</span>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span>COMMAND DECISION POINT</span>
-            </div>
-          )}
+      <div className="bg-amber-950/50 border-b border-amber-800 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-amber-400 font-bold">
+          <AlertTriangle className="w-5 h-5 animate-pulse" />
+          <h2 className="tracking-widest text-sm uppercase">⚠ Decision Point</h2>
         </div>
-
-        {decisionRequired && (
-          <span className="text-[10px] text-amber-400/90 font-bold">
-            TIMESTAMPT: {decisionRequired.timestamp}
-          </span>
-        )}
+        <div className="flex items-center space-x-2 text-xs font-mono">
+          <Radio className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-slate-400">COMMS:</span>
+          {getCommsDisplay()}
+        </div>
       </div>
 
-      <p className="text-slate-300 font-medium mb-3 leading-relaxed">
-        {currentPrompt}
-      </p>
+      <div className="p-4 flex-1 overflow-y-auto">
+        <h3 className="text-lg font-bold text-white mb-2">{decisionPoint.title}</h3>
+        
+        <div className="bg-slate-950 rounded border border-slate-800 p-3 mb-6 text-sm text-slate-300 font-mono whitespace-pre-wrap leading-relaxed">
+          {decisionPoint.situation}
+        </div>
 
-      {/* Options Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {options.map((opt, idx) => (
-          <button
-            key={opt.id || idx}
-            type="button"
-            onClick={() => handleSelectOption(opt.label)}
-            className="text-left p-2.5 rounded bg-slate-950/80 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/60 transition group flex flex-col justify-between"
-          >
-            <div>
-              <div className="flex items-center space-x-1.5 text-cyan-300 font-bold group-hover:text-cyan-200">
-                <span className="text-[10px] px-1 bg-slate-900 border border-slate-700 rounded text-slate-400">
-                  {idx + 1}
-                </span>
-                <span>{opt.label}</span>
+        <div className="space-y-3">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Available Actions:</div>
+          {decisionPoint.availableActions.map(action => (
+            <button
+              key={action.id}
+              onClick={() => handleActionSelect(action.id)}
+              className={`w-full text-left p-3 rounded border transition-all flex items-start space-x-3
+                ${selectedActionId === action.id 
+                  ? 'bg-cyan-900/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500' 
+                  : 'bg-slate-950/80 border-slate-800 hover:bg-slate-800/90 hover:border-cyan-500/60'
+                }
+              `}
+            >
+              <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0
+                ${selectedActionId === action.id ? 'border-cyan-400 bg-cyan-400/20' : 'border-slate-500'}
+              `}>
+                {selectedActionId === action.id && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1 leading-snug">
-                {opt.description}
-              </p>
-            </div>
-
-            <div className="mt-2 text-[10px] text-slate-500 group-hover:text-cyan-400 flex items-center space-x-1 justify-end font-bold">
-              <span>SELECT &amp; GIVE RATIONALE</span>
-              <ArrowRight className="w-3 h-3 ml-0.5" />
-            </div>
-          </button>
-        ))}
+              <div>
+                <div className={`font-bold ${selectedActionId === action.id ? 'text-cyan-300' : 'text-slate-200'}`}>
+                  {action.label}
+                </div>
+                {action.description && (
+                  <div className={`text-xs mt-1 ${selectedActionId === action.id ? 'text-cyan-400/80' : 'text-slate-400'}`}>
+                    {action.description}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Rationale Modal */}
-      {selectedOptionText && (
+      {selectedActionId && (
         <RationaleModal
           isOpen={isModalOpen}
-          selectedOptionText={selectedOptionText}
+          selectedOptionText={decisionPoint.availableActions.find(a => a.id === selectedActionId)?.label || ""}
           onClose={() => setIsModalOpen(false)}
           onSubmit={handleModalSubmit}
         />

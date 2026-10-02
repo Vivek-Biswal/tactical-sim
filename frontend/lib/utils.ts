@@ -32,6 +32,15 @@ export function getCommsStatusColor(status: CommsStatus) {
         glow: "shadow-[0_0_12px_rgba(245,158,11,0.3)]",
         label: "DELAYED"
       };
+    case "degraded":
+      return {
+        bg: "bg-orange-500/10",
+        border: "border-orange-500/40",
+        text: "text-orange-400",
+        dot: "bg-orange-500",
+        glow: "shadow-[0_0_12px_rgba(249,115,22,0.3)]",
+        label: "DEGRADED"
+      };
     case "offline":
       return {
         bg: "bg-rose-500/10",

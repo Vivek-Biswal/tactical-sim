@@ -29,10 +29,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   const isStale = mapStatus === "outdated";
 
-  const handleUnitClick = (unit: TacticalUnit) => {
+  const handleUnitClick = (e: React.MouseEvent, unit: TacticalUnit) => {
+    e.stopPropagation();
     setSelectedUnitId(unit.id);
     if (onUnitSelect) onUnitSelect(unit);
   };
+
+  const handleMapClick = () => {
+    setSelectedUnitId(null);
+  };
+
+  const selectedUnit = units.find(u => u.id === selectedUnitId);
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -103,10 +110,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       <div className="relative flex-1 w-full h-full overflow-hidden bg-[#070b12]">
         <svg
           viewBox="0 0 800 600"
-          className="w-full h-full object-contain select-none"
+          className="w-full h-full object-contain select-none cursor-crosshair"
           style={{ transform: `scale(${zoomLevel})`, transformOrigin: "center center", transition: "transform 0.2s ease-out" }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setCursorPos(null)}
+          onClick={handleMapClick}
         >
           <defs>
             {/* Elevation Shading Gradients */}
@@ -126,10 +134,51 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <pattern id="stale-scanline" width="10" height="6" patternUnits="userSpaceOnUse">
               <line x1="0" y1="0" x2="10" y2="0" stroke="#f59e0b" strokeWidth="0.8" opacity="0.12" />
             </pattern>
+
+            {/* Forest Pattern */}
+            <pattern id="forest-pattern" width="20" height="20" patternUnits="userSpaceOnUse">
+              <circle cx="10" cy="10" r="8" fill="#064e3b" opacity="0.4" />
+              <circle cx="4" cy="4" r="5" fill="#065f46" opacity="0.3" />
+            </pattern>
           </defs>
+
+          {/* Water Features */}
+          <g className="water-features">
+            <path
+              d="M 400 0 Q 380 150 450 300 T 400 600"
+              fill="none"
+              stroke="#0369a1"
+              strokeWidth="24"
+              opacity="0.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M 400 0 Q 380 150 450 300 T 400 600"
+              fill="none"
+              stroke="#0ea5e9"
+              strokeWidth="2"
+              opacity="0.8"
+              strokeDasharray="10,15"
+            />
+            <text x="460" y="100" fill="#38bdf8" fontSize="11" fontFamily="monospace" transform="rotate(75 460 100)" opacity="0.7">
+              SERPENT RIVER
+            </text>
+          </g>
 
           {/* Terrain Base & Shaded Elevation Contours */}
           <g className="terrain-contours">
+            {/* Forest Area */}
+            <path
+              d="M 60 60 Q 150 40 180 120 Q 200 200 100 220 Q 30 180 60 60 Z"
+              fill="url(#forest-pattern)"
+              stroke="#064e3b"
+              strokeWidth="1.5"
+              strokeDasharray="4,4"
+            />
+            <text x="80" y="140" fill="#34d399" fontSize="10" fontFamily="monospace" opacity="0.8">
+              [WHISPERING PINES]
+            </text>
+
             {/* Western Ridge Terrain Feature */}
             <ellipse cx="230" cy="220" rx="140" ry="110" fill="url(#hill-ridge-gradient)" />
             <path
@@ -210,6 +259,40 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             </text>
           </g>
 
+          {/* Infrastructure */}
+          <g className="infrastructure">
+            {/* Village / City Area */}
+            <g transform="translate(250, 400)">
+              <rect x="0" y="0" width="80" height="60" fill="#1e293b" opacity="0.6" stroke="#475569" />
+              <rect x="10" y="10" width="20" height="15" fill="#334155" />
+              <rect x="40" y="10" width="25" height="20" fill="#334155" />
+              <rect x="15" y="35" width="45" height="15" fill="#334155" />
+              <text x="40" y="-8" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                NOVA SETTLEMENT
+              </text>
+            </g>
+            
+            {/* Military Base / HQ */}
+            <g transform="translate(600, 450)">
+              <polygon points="0,30 40,0 80,30 80,80 0,80" fill="#0f172a" stroke="#64748b" strokeWidth="2" strokeDasharray="5,3" />
+              <rect x="25" y="30" width="30" height="30" fill="#1e293b" stroke="#475569" />
+              <circle cx="40" cy="45" r="5" fill="#ef4444" opacity="0.8" />
+              <text x="40" y="95" textAnchor="middle" fill="#cbd5e1" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                FOB VANGUARD (HQ)
+              </text>
+            </g>
+
+            {/* Bridge (Highway crossing Serpent River) */}
+            <g transform="translate(450, 290) rotate(-35)">
+              <rect x="-15" y="-15" width="30" height="30" fill="#1e293b" stroke="#eab308" strokeWidth="1.5" />
+              <line x1="-15" y1="-5" x2="15" y2="-5" stroke="#eab308" strokeWidth="1" />
+              <line x1="-15" y1="5" x2="15" y2="5" stroke="#eab308" strokeWidth="1" />
+              <text x="0" y="-20" textAnchor="middle" fill="#fef08a" fontSize="8" fontFamily="monospace">
+                BRIDGE 7A
+              </text>
+            </g>
+          </g>
+
           {/* Coordinate Grid & Watermarks */}
           <TacticalGrid width={800} height={600} />
 
@@ -237,7 +320,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
               unit={unit}
               isSelected={selectedUnitId === unit.id}
               isStale={isStale}
-              onClick={() => handleUnitClick(unit)}
+              onClick={(e) => handleUnitClick(e, unit)}
             />
           ))}
 
@@ -255,6 +338,50 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
         {/* Legend */}
         <MapLegend />
+
+        {/* Unit Information Panel */}
+        {selectedUnit && (
+          <div className="absolute top-4 right-4 w-64 bg-slate-900/95 border border-cyan-800 rounded shadow-xl pointer-events-auto z-20 overflow-hidden">
+            <div className="bg-cyan-950 px-3 py-1.5 border-b border-cyan-800 flex justify-between items-center">
+              <span className="text-cyan-400 font-bold text-sm tracking-wider">UNIT INFO</span>
+              <button onClick={() => setSelectedUnitId(null)} className="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <div className="p-3 space-y-2 text-xs font-mono">
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">NAME:</span>
+                <span className="col-span-2 text-slate-200">{selectedUnit.name} ({selectedUnit.callsign})</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">TYPE:</span>
+                <span className="col-span-2 text-slate-200">{selectedUnit.type || selectedUnit.role}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">FACTION:</span>
+                <span className={`col-span-2 capitalize font-semibold ${
+                  selectedUnit.faction === 'friendly' ? 'text-cyan-400' :
+                  selectedUnit.faction === 'hostile' ? 'text-red-400' : 'text-amber-400'
+                }`}>{selectedUnit.faction || "Unknown"}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">STATUS:</span>
+                <span className="col-span-2 capitalize text-slate-300">{selectedUnit.status}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">SECTOR:</span>
+                <span className="col-span-2 text-slate-300">
+                  {selectedUnit.sector || "Unknown"} [{Math.round(selectedUnit.x)}, {Math.round(selectedUnit.y)}]
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="text-slate-500">COMMS:</span>
+                <span className={`col-span-2 ${
+                  selectedUnit.communicationStatus === 'NORMAL' ? 'text-emerald-400' :
+                  selectedUnit.communicationStatus === 'LOST' ? 'text-red-500' : 'text-amber-400'
+                }`}>{selectedUnit.communicationStatus || "UNKNOWN"}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

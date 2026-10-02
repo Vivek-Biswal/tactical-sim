@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSimulationWebSocket } from "@/lib/websocket";
 import { InstructorControls } from "@/components/instructor/InstructorControls";
+import { InstructorInjectPanel } from "@/components/instructor/InstructorInjectPanel";
 import { LiveMonitor } from "@/components/instructor/LiveMonitor";
 import { TraineeStatus } from "@/components/instructor/TraineeStatus";
 import { TacticalMap } from "@/components/tactical/TacticalMap";
@@ -95,18 +96,23 @@ export default function InstructorExerciseControlPage({
 
       {/* Main Instructor Operations Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Top Control Bar with Injects */}
-        <InstructorControls
-          commsStatus={state.commsStatus}
-          mapStatus={state.mapStatus}
-          simStatus={state.status}
-          speedMultiplier={state.speedMultiplier}
-          onInject={sendInstructorInject}
-          onControl={sendExerciseControl}
-        />
-
-        {/* Live Exercise Telemetry Monitor */}
-        <LiveMonitor state={state} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <InstructorControls
+              commsStatus={state.commsStatus}
+              mapStatus={state.mapStatus}
+              simStatus={state.status}
+              speedMultiplier={state.speedMultiplier}
+              onInject={sendInstructorInject}
+              onControl={sendExerciseControl}
+            />
+            {/* Live Exercise Telemetry Monitor */}
+            <LiveMonitor state={state} />
+          </div>
+          <div>
+            <InstructorInjectPanel onInject={sendInstructorInject} />
+          </div>
+        </div>
 
         {/* Bottom Split: Tactical Map Mirror + Trainee Presence */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

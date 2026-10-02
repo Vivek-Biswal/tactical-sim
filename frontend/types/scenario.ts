@@ -1,10 +1,12 @@
-export type CommsStatus = "normal" | "delayed" | "offline";
+export type CommsStatus = "normal" | "delayed" | "degraded" | "offline";
 export type MapStatus = "current" | "outdated" | "unavailable";
 
 export interface ScenarioEventPayload {
   commsStatus?: CommsStatus;
   mapStatus?: MapStatus;
   radioDelaySeconds?: number;
+  messageLossPercentage?: number;
+  allowIncompleteReports?: boolean;
   staleSinceSeconds?: number;
   staleMessage?: string;
   systemAlert?: string;
@@ -26,9 +28,20 @@ export interface ScenarioEventPayload {
     id: string;
     label: string;
     description: string;
+    consequence?: Record<string, unknown>;
   }>;
   availableInfo?: string[];
   unavailableInfo?: string[];
+  
+  // Phase 3 extensions
+  targetUnitId?: string;
+  x?: number;
+  y?: number;
+  heading?: number;
+  status?: "operational" | "moving" | "damaged" | "unknown";
+  faction?: "friendly" | "hostile" | "neutral" | "unknown";
+  communicationStatus?: "NORMAL" | "DELAYED" | "DEGRADED" | "LOST";
+  
   [key: string]: unknown;
 }
 
@@ -46,10 +59,14 @@ export interface TacticalUnit {
   name: string;
   callsign: string;
   role: string;
+  type: string;
+  faction: "friendly" | "hostile" | "neutral" | "unknown";
   x: number;
   y: number;
   heading?: number;
-  status: "operational" | "degraded" | "contested" | "neutral";
+  status: "operational" | "moving" | "damaged" | "unknown";
+  sector?: string;
+  communicationStatus?: "NORMAL" | "DELAYED" | "DEGRADED" | "LOST";
 }
 
 export interface ActivityMarker {

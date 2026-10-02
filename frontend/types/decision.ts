@@ -1,29 +1,57 @@
+import { CommsStatus } from "./scenario";
+
 export type ConfidenceLevel = "low" | "medium" | "high";
 
-export interface Decision {
+export interface DecisionAction {
+  id: string;
+  label: string;
+  description?: string;
+  consequence?: Record<string, unknown>;
+}
+
+export interface DecisionPoint {
+  id: string;
+  timestamp: number;
+  simulationSecond: number;
+  title: string;
+  situation: string;
+  availableActions: DecisionAction[];
+  status: "active" | "resolved";
+  timeLimit?: number;
+  relatedSector?: string;
+  relatedUnits?: string[];
+}
+
+export interface DecisionRecord {
   id: string;
   exerciseId: string;
   traineeId: string;
-  decision: string;
-  rationale: string;
-  confidence: ConfidenceLevel;
-  timestamp: number;
-  simulationTime: string;
-  simulationSecond: number;
-  availableInformation: string[];
-  unavailableInformation: string[];
+  decisionPointId: string;
+  selectedActionId: string;
+  selectedActionLabel: string;
+  scenarioTimestamp: number;
+  realTimestamp: number;
+  communicationState: CommsStatus;
+  
+  // Optional relations
+  relatedSector?: string;
+  relatedUnits?: string[];
+
+  // Legacy/AAR fields
+  decision?: string; 
+  rationale?: string;
+  confidence?: ConfidenceLevel;
+  simulationTime?: string;
+  availableInformation?: string[];
+  unavailableInformation?: string[];
 }
 
-export interface DecisionPromptOption {
-  id: string;
-  label: string;
-  description: string;
-}
-
-export interface DecisionPrompt {
+// Backward-compatibility aliases used by AAR and legacy components
+export type Decision = DecisionRecord;
+export type DecisionPrompt = {
   eventId: string;
   prompt: string;
-  options: DecisionPromptOption[];
+  options: Array<{ id: string; label: string; description?: string }>;
   timestamp: string;
   simulationSecond: number;
-}
+};

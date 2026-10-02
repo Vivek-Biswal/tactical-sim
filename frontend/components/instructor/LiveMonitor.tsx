@@ -9,10 +9,6 @@ interface LiveMonitorProps {
 }
 
 export const LiveMonitor: React.FC<LiveMonitorProps> = ({ state, className = "" }) => {
-  const latestDecision = state.decisions.length > 0
-    ? state.decisions[state.decisions.length - 1]
-    : null;
-
   return (
     <div className={`space-y-4 font-mono text-xs ${className}`}>
       {/* Metric Cards Row */}
@@ -59,53 +55,71 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ state, className = "" 
         <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
           <div className="font-bold text-slate-200 flex items-center space-x-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>LATEST TRAINEE DECISION AUDIT</span>
+            <span>TRAINEE DECISION AUDIT</span>
           </div>
           <span className="text-[10px] text-slate-500">
             RECORDED DECISIONS: {state.decisions.length}
           </span>
         </div>
 
-        {latestDecision ? (
+        {state.activeDecisionPoint && (
+          <div className="mb-4 p-3 bg-amber-950/20 border border-amber-900/50 rounded-lg">
+            <div className="text-[10px] text-amber-500 font-bold uppercase mb-1 flex items-center space-x-1">
+              <AlertCircle className="w-3 h-3" />
+              <span>ACTIVE DECISION PENDING</span>
+            </div>
+            <div className="text-slate-200 font-bold text-xs mb-1">{state.activeDecisionPoint.title}</div>
+            <div className="text-slate-400 text-[10px] italic mb-2">{state.activeDecisionPoint.situation}</div>
+            <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Available Actions:</div>
+            <ul className="list-disc list-inside text-[10px] text-slate-400">
+              {state.activeDecisionPoint.availableActions.map(a => (
+                <li key={a.id}>{a.label}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {state.decisions.length > 0 ? (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-cyan-300 font-bold text-xs">{latestDecision.decision}</span>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${
-                  latestDecision.confidence === "high"
-                    ? "bg-emerald-950 text-emerald-400 border-emerald-800"
-                    : latestDecision.confidence === "medium"
-                    ? "bg-amber-950 text-amber-400 border-amber-800"
-                    : "bg-rose-950 text-rose-400 border-rose-800"
-                }`}
-              >
-                CONFIDENCE: {latestDecision.confidence}
-              </span>
-            </div>
-
-            <div className="p-2.5 bg-slate-950 rounded border border-slate-800">
-              <span className="text-[10px] text-slate-500 font-bold block mb-1">
-                TRAINEE RATIONALE (RECORDED AT {latestDecision.simulationTime}):
-              </span>
-              <p className="text-slate-300 leading-relaxed italic">
-                &ldquo;{latestDecision.rationale}&rdquo;
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-[10px] pt-1">
-              <div className="text-slate-400">
-                <span className="text-emerald-400 font-bold">INFO KNOWN:</span>{" "}
-                {latestDecision.availableInformation.length} items
+            {state.decisions.slice().reverse().map((dec) => (
+              <div key={dec.id} className="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-emerald-300 font-bold truncate max-w-[60%]">{dec.selectedActionLabel || dec.decision}</span>
+                  <div className="flex items-center space-x-1 shrink-0">
+                    {dec.confidence && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border ${
+                          dec.confidence === "high"
+                            ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+                            : dec.confidence === "medium"
+                            ? "bg-amber-950 text-amber-400 border-amber-800"
+                            : "bg-rose-950 text-rose-400 border-rose-800"
+                        }`}
+                      >
+                        {dec.confidence}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-slate-500 font-mono">{dec.simulationTime || `T+${dec.scenarioTimestamp}s`}</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 text-[10px] text-slate-500 mb-1">
+                  <span>COMMS AT DECISION: <span className={`font-bold ${
+                    dec.communicationState === "normal" ? "text-emerald-400" :
+                    dec.communicationState === "delayed" ? "text-amber-400" :
+                    dec.communicationState === "degraded" ? "text-orange-400" : "text-rose-400"
+                  }`}>{dec.communicationState?.toUpperCase()}</span></span>
+                </div>
+                {dec.rationale && (
+                  <div className="p-1.5 bg-slate-900 rounded border border-slate-800 italic text-slate-400">
+                    &ldquo;{dec.rationale}&rdquo;
+                  </div>
+                )}
               </div>
-              <div className="text-slate-400">
-                <span className="text-rose-400 font-bold">INFO DENIED:</span>{" "}
-                {latestDecision.unavailableInformation.length} items
-              </div>
-            </div>
+            ))}
           </div>
         ) : (
           <div className="p-4 text-center bg-slate-950 rounded border border-slate-800 text-slate-500 italic">
-            Standing by. Trainee has not yet been forced to submit an operational decision.
+            Standing by. No decision has been submitted yet.
           </div>
         )}
       </div>

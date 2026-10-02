@@ -40,10 +40,10 @@ export const DecisionTimeline: React.FC<DecisionTimelineProps> = ({
     })),
     ...decisions.map((dec) => ({
       type: "decision" as const,
-      second: dec.simulationSecond,
-      time: dec.simulationTime,
-      title: `COMMANDER DECISION: ${dec.decision}`,
-      description: `Rationale: "${dec.rationale}" (Confidence: ${dec.confidence.toUpperCase()})`,
+      second: dec.scenarioTimestamp,
+      time: dec.simulationTime ?? `T+${dec.scenarioTimestamp}s`,
+      title: `COMMANDER DECISION: ${dec.selectedActionLabel || dec.decision || "(no label)"}`,
+      description: `Rationale: "${dec.rationale ?? "-"}" (Confidence: ${dec.confidence?.toUpperCase() ?? "N/A"})`,
       category: "decision"
     }))
   ].sort((a, b) => a.second - b.second);

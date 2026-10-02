@@ -19,225 +19,296 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         name: "Team Alpha",
         callsign: "Viper 1-1",
         role: "Lead Recon Point",
+        type: "Recon Infantry",
+        faction: "friendly",
         x: 220,
         y: 380,
         heading: 35,
-        status: "operational"
+        status: "operational",
+        sector: "Sector 7",
+        communicationStatus: "NORMAL"
       },
       {
         id: "unit-bravo",
         name: "Team Bravo",
         callsign: "Ironclad 1-2",
-        role: "Heavy Support / Security",
+        role: "Heavy Support",
+        type: "Mechanized Infantry",
+        faction: "friendly",
         x: 160,
         y: 510,
         heading: 25,
-        status: "operational"
+        status: "operational",
+        sector: "Sector 7",
+        communicationStatus: "NORMAL"
       },
       {
-        id: "objective-bravo",
-        name: "Objective Bravo",
-        callsign: "Choke Point Bravo",
-        role: "Tactical Waypoint",
-        x: 580,
+        id: "unit-charlie",
+        name: "Team Charlie",
+        callsign: "Ghost 1-3",
+        role: "Flank Security",
+        type: "Infantry",
+        faction: "friendly",
+        x: 100,
+        y: 560,
+        heading: 45,
+        status: "moving",
+        sector: "Sector 7",
+        communicationStatus: "DELAYED"
+      },
+      {
+        id: "contact-1",
+        name: "Unknown Contact 1",
+        callsign: "Unknown 1",
+        role: "Unidentified Motorized",
+        type: "Motorized",
+        faction: "unknown",
+        x: 710,
+        y: 320,
+        heading: 180,
+        status: "unknown",
+        sector: "Sector 8",
+        communicationStatus: "LOST"
+      },
+      {
+        id: "contact-2",
+        name: "Unknown Contact 2",
+        callsign: "Unknown 2",
+        role: "Suspected Infantry",
+        type: "Infantry",
+        faction: "hostile",
+        x: 260,
         y: 210,
-        heading: 0,
-        status: "contested"
+        heading: 90,
+        status: "unknown",
+        sector: "Sector 7",
+        communicationStatus: "LOST"
       }
     ],
     events: [
       {
-        id: "evt-1-normal",
-        type: "comms_degradation",
+        id: "evt-start",
+        type: "STATUS_CHANGE",
         triggerTime: 0,
-        title: "Normal Communications Baseline",
-        description: "Operation initiates. Satellite and tactical VHF networks operational. Real-time telemetry feed active.",
+        title: "Scenario Started",
+        description: "Operation Silent Link initiates.",
         payload: {
-          commsStatus: "normal",
-          mapStatus: "current",
-          radioDelaySeconds: 0,
-          broadcastMessage: {
-            sender: "COMMAND_HQ",
-            senderRole: "INSTRUCTOR",
-            content: "All callsigns: Operation Silent Link is GREEN. Advance toward Waypoint Charlie via primary road corridor. Maintain standard radio protocols."
-          },
-          availableInfo: [
-            "Real-time GPS satellite telemetry",
-            "Clear VHF voice/data carrier",
-            "Pre-mission reconnaissance chart"
-          ],
-          unavailableInfo: []
+          targetUnitId: "unit-alpha",
+          status: "operational"
         }
       },
       {
-        id: "evt-2-delay",
+        id: "evt-alpha-move",
+        type: "UNIT_MOVE",
+        triggerTime: t(16.66), // ~20 seconds if duration is 120s
+        title: "Team Alpha Moving",
+        description: "Team Alpha begins movement.",
+        payload: {
+          targetUnitId: "unit-alpha",
+          status: "moving",
+          x: 280,
+          y: 350
+        }
+      },
+      {
+        id: "evt-uav-detect",
+        type: "CONTACT_DETECTED",
+        triggerTime: t(33.33), // ~40 seconds if duration is 120s
+        title: "UAV Detection",
+        description: "UAV detects unknown contact.",
+        payload: {
+          targetUnitId: "contact-2",
+          status: "unknown",
+          x: 270,
+          y: 220
+        }
+      },
+      {
+        id: "evt-intel",
+        type: "INTEL_REPORT",
+        triggerTime: t(41.66), // ~50 seconds if duration is 120s
+        title: "Intel Report Generated",
+        description: "Intel report is generated.",
+        payload: {
+          sender: "UAV REPORT",
+          senderRole: "INTELLIGENCE",
+          content: "Unknown activity detected in Sector C."
+        }
+      },
+      // ── Phase 4: Communication Degradation Timeline ──
+      {
+        id: "evt-comms-delayed",
         type: "comms_degradation",
-        triggerTime: t(20), // 24s in demo
-        title: "Radio Latency & Packet Delay",
-        description: "Atmospheric or electronic degradation causes 8-10 second transmission latency on tactical net.",
+        triggerTime: t(45),
+        title: "Comms Degradation: DELAYED",
+        description: "Electronic interference detected. Radio latency increasing.",
         payload: {
           commsStatus: "delayed",
           radioDelaySeconds: 8,
+          messageLossPercentage: 0,
+          allowIncompleteReports: false,
           broadcastMessage: {
-            sender: "TEAM_ALPHA",
-            senderRole: "TEAM_ALPHA",
-            content: "[DELAYED REPORT] Alpha Lead to Command: Entering Defile approach. Terrain is funneling. Signal latency degrading."
+            sender: "SIGINT WARNING",
+            senderRole: "INTELLIGENCE",
+            content: "WARNING: Electronic emission spike detected bearing 045°. Expect radio propagation delay. All stations maintain transmission discipline."
           },
           availableInfo: [
-            "Delayed tactical radio net (8s)",
-            "Common Operating Picture (COP)",
-            "Last reported subunit coordinates"
+            "Satellite GPS Track (Normal)",
+            "Pre-mission Area Reconnaissance"
           ],
           unavailableInfo: [
-            "Instantaneous tactical acknowledgements",
-            "Real-time voice verification"
+            "Real-time VHF Radio (Delayed +8s)"
           ]
         }
       },
       {
-        id: "evt-3-conflicting",
-        type: "conflicting_report",
-        triggerTime: t(40), // 48s in demo
-        title: "Contradictory Reconnaissance Feeds",
-        description: "Conflicting intelligence received simultaneously from tactical ground scouts and divisional SIGINT.",
+        id: "evt-contact-active",
+        type: "STATUS_CHANGE",
+        triggerTime: t(50),
+        title: "Contact 1 Active",
+        description: "Unknown Contact 1 becomes active.",
+        payload: {
+          targetUnitId: "contact-1",
+          status: "operational",
+          faction: "hostile"
+        }
+      },
+      {
+        id: "evt-comms-degraded",
+        type: "comms_degradation",
+        triggerTime: t(60),
+        title: "Comms Degradation: DEGRADED",
+        description: "Hostile jammer activation suspected. Partial signal loss and garbled transmissions.",
+        payload: {
+          commsStatus: "degraded",
+          radioDelaySeconds: 15,
+          messageLossPercentage: 30,
+          allowIncompleteReports: true,
+          broadcastMessage: {
+            sender: "EW WARNING",
+            senderRole: "HQ",
+            content: "CRITICAL: Hostile electronic warfare jammer active. 30% packet loss. Expect incomplete/garbled transmissions. Verify all intel before acting."
+          },
+          availableInfo: [
+            "Pre-mission Area Reconnaissance",
+            "Last known GPS positions (stale)"
+          ],
+          unavailableInfo: [
+            "Real-time VHF Radio (Degraded — 30% loss)",
+            "Satellite GPS Track (Intermittent)"
+          ]
+        }
+      },
+      {
+        id: "evt-conflicting-reports",
+        type: "CONFLICTING_REPORT",
+        triggerTime: t(65),
+        title: "Conflicting Intelligence Reports",
+        description: "Two sources provide contradictory information about hostile positions.",
         payload: {
           reports: [
             {
               source: "Team Alpha Scout",
               senderRole: "TEAM_ALPHA",
-              content: "URGENT CONTACT: Hostile patrol sighted on WESTERN defile ridge! Recommend holding at tree line."
+              content: "CONTACT REPORT: 3 hostile dismounts observed at grid 047-218, moving southeast toward our position. Request immediate fire support."
             },
             {
-              source: "Divisional SIGINT",
+              source: "SIGINT Intercept",
               senderRole: "INTELLIGENCE",
-              content: "ADVISORY INTERCEPT: RF sensor array pinpoints hostile motorized convoy along EASTERN canyon flank. Western sector clear."
+              content: "SIGINT ADVISORY: Acoustic arrays show NO activity at grid 047-218. Hostile main body concentrated at grid 092-315. Alpha scout report may be misidentified civilians."
             }
-          ],
-          availableInfo: [
-            "Team Alpha visual scout report (Western flank hostile)",
-            "Divisional SIGINT feed (Eastern flank motorized activity)",
-            "Delayed radio link (8s)"
-          ],
-          unavailableInfo: [
-            "Overhead thermal confirmation (cloud/electronic mask)",
-            "Visual verification of Eastern canyon"
           ]
         }
       },
       {
-        id: "evt-4-outdated-map",
-        type: "map_status",
-        triggerTime: t(55), // 66s in demo
-        title: "COP Telemetry Stale / GPS Feed Lost",
-        description: "Tactical Common Operating Picture loses satellite uplink. Map position data freezes at last verified ping.",
-        payload: {
-          mapStatus: "outdated",
-          staleSinceSeconds: 180,
-          staleMessage: "COP synchronization timeout. Displaying stale telemetry snapshot.",
-          availableInfo: [
-            "Outdated map positions (3m stale)",
-            "Previous contradictory intelligence"
-          ],
-          unavailableInfo: [
-            "Live friendly track coordinates",
-            "Real-time sensor overlays",
-            "GPS precision targeting"
-          ]
-        }
-      },
-      {
-        id: "evt-5-dropout",
-        type: "comms_degradation",
-        triggerTime: t(70), // 84s in demo
-        title: "Total Radio Blackout",
-        description: "Full-spectrum RF jamming in effect. Tactical radio carrier dropped. All outgoing transmissions unacknowledged.",
-        payload: {
-          commsStatus: "offline",
-          radioDelaySeconds: 9999,
-          systemAlert: "SIGNAL LOST — TACTICAL NET OFFLINE — PACKETS DROPPED",
-          availableInfo: [
-            "Pre-jamming mission briefing",
-            "Stale map overlay (Sector 7)",
-            "Last known unit azimuths"
-          ],
-          unavailableInfo: [
-            "Radio communications (ALL CHANNELS OFFLINE)",
-            "Live COP telemetry",
-            "Subunit status reports"
-          ]
-        }
-      },
-      {
-        id: "evt-6-intel",
-        type: "intel_update",
-        triggerTime: t(82), // 98s in demo
-        title: "High-Priority Electronic Intercept",
-        description: "Emergency acoustic relay intercept reports enemy electronic warfare vehicle operating near Choke Point Bravo.",
-        payload: {
-          sender: "ACOUSTIC_RELAY",
-          senderRole: "INTELLIGENCE",
-          content: "FLASH OVERRIDE: Low-band acoustic sensors confirm hostile mobile electronic warfare vehicle stationed at choke point Bravo (Northern Highway). Jamming radius estimated 2.5km.",
-          availableInfo: [
-            "Acoustic EW intercept report",
-            "Hostile jammer located at Choke Point Bravo",
-            "Pre-jamming scout reports"
-          ],
-          unavailableInfo: [
-            "Two-way contact with Team Alpha or Bravo",
-            "Confirmation of jammer escort strength",
-            "Updated friendly unit positions"
-          ]
-        }
-      },
-      {
-        id: "evt-7-decision",
+        id: "evt-decision-under-degraded",
         type: "decision_point",
-        triggerTime: t(90), // 108s in demo
-        title: "Critical Tactical Decision Point",
-        description: "Commander must commit to operational action under conditions of degraded comms, contradictory intel, and stale telemetry.",
+        triggerTime: t(70),
+        title: "Commander Decision Required",
+        description: "Conflicting intel under degraded comms — commander must decide.",
         payload: {
-          prompt: "With communications severed, conflicting enemy sightings, and mobile jammer pinpointed at Choke Point Bravo, specify your immediate order:",
+          prompt: "Conflicting reports received under degraded communications. Alpha scout reports hostile dismounts at grid 047-218. SIGINT says that grid is clear and hostiles are at grid 092-315. What is your order?",
           options: [
             {
-              id: "opt-1",
-              label: "Continue Current Route through Northern Defile",
-              description: "Maintain original schedule and assault toward waypoint despite reported jammer."
+              id: "trust-alpha",
+              label: "Trust Alpha Scout — Redirect fire support to grid 047-218",
+              description: "Forward observers have direct visual. Prioritize eyes-on-target over remote SIGINT.",
+              consequence: { type: "move_unit", targetUnitId: "unit-alpha", sector: "Sector B", status: "moving", x: 180, y: 150 }
             },
             {
-              id: "opt-2",
-              label: "Divert Route via Western Ridge Pass",
-              description: "Bypass suspected jammer vehicle, accept rough terrain delay and risk of Western patrol."
+              id: "trust-sigint",
+              label: "Trust SIGINT — Reorient toward grid 092-315",
+              description: "Acoustic arrays are more reliable than visual in degraded conditions. Redirect main effort.",
+              consequence: { type: "move_unit", targetUnitId: "unit-alpha", sector: "Sector D", status: "moving", x: 450, y: 400 }
             },
             {
-              id: "opt-3",
-              label: "Halt and Establish Defensive Perimeter",
-              description: "Wait for communication recovery or courier contact before risking further advancement."
-            },
-            {
-              id: "opt-4",
-              label: "Dispatch Runner / Recon Scout toward Eastern Canyon",
-              description: "Seek direct visual confirmation before moving main force."
+              id: "hold-verify",
+              label: "Hold Position — Request verification from both sources",
+              description: "Do not commit forces until conflicting reports are reconciled. Risk: delay may allow hostile repositioning.",
+              consequence: { type: "move_unit", targetUnitId: "unit-alpha", status: "operational" }
             }
-          ],
-          availableInfo: [
-            "Team Alpha conflicting sighting (West)",
-            "Divisional SIGINT conflicting report (East)",
-            "Acoustic intercept locating EW vehicle at Choke Point Bravo",
-            "Stale COP map (3 min old)"
-          ],
-          unavailableInfo: [
-            "Two-way tactical radio link (OFFLINE)",
-            "Real-time GPS track of friendly elements",
-            "Confirmation of jammer perimeter security"
           ]
         }
       },
       {
-        id: "evt-8-end",
-        type: "checkpoint",
+        id: "evt-comms-lost",
+        type: "comms_degradation",
+        triggerTime: t(80),
+        title: "Comms LOST — Full Blackout",
+        description: "All radio communications severed. Hostile jammer at full power.",
+        payload: {
+          commsStatus: "offline",
+          radioDelaySeconds: 0,
+          messageLossPercentage: 100,
+          allowIncompleteReports: false,
+          broadcastMessage: {
+            sender: "SYSTEM",
+            senderRole: "INSTRUCTOR",
+            content: "⚠ TOTAL COMMS BLACKOUT — All VHF/UHF carriers offline. You are operating without external communication. Rely on last known positions and pre-mission briefing."
+          },
+          availableInfo: [
+            "Pre-mission Area Reconnaissance",
+            "Last known unit positions (STALE)"
+          ],
+          unavailableInfo: [
+            "VHF/UHF Radio (LOST — jammer active)",
+            "Satellite GPS Track (LOST)",
+            "UAV Telemetry Feed (LOST)",
+            "Real-time Intelligence Updates (LOST)"
+          ]
+        }
+      },
+      {
+        id: "evt-comms-restored",
+        type: "comms_degradation",
+        triggerTime: t(92),
+        title: "Comms Restored — Normal",
+        description: "Counter-EW measures effective. Radio net re-established.",
+        payload: {
+          commsStatus: "normal",
+          radioDelaySeconds: 0,
+          messageLossPercentage: 0,
+          allowIncompleteReports: false,
+          broadcastMessage: {
+            sender: "EW COUNTER",
+            senderRole: "HQ",
+            content: "ADVISORY: Counter-electronic warfare measures successful. Hostile jammer neutralized. All stations, re-establish net and transmit backlogged SITREPs."
+          },
+          availableInfo: [
+            "Satellite GPS Track (Restored)",
+            "Direct VHF Radio Uplink (Restored)",
+            "Pre-mission Area Reconnaissance",
+            "UAV Telemetry (Restored)"
+          ],
+          unavailableInfo: []
+        }
+      },
+      {
+        id: "evt-end",
+        type: "STATUS_CHANGE",
         triggerTime: durationSeconds,
         title: "Exercise Completed",
-        description: "Simulation duration reached. Preparing After Action Review (AAR).",
+        description: "Simulation duration reached.",
         payload: {}
       }
     ]

@@ -92,9 +92,21 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, className = 
               </div>
 
               {/* Message Content */}
-              <p className={`text-xs leading-relaxed ${isDropped ? "line-through opacity-75" : ""}`}>
-                {msg.content}
+              <p className={`text-[11px] leading-relaxed ${isDropped ? "line-through opacity-75" : ""}`}>
+                {msg.content.split(/(\[STATIC\]|UNKNOWN)/g).map((part, i) => {
+                  if (part === "[STATIC]" || part === "UNKNOWN") {
+                    return <span key={i} className="text-amber-500 font-bold bg-amber-950/50 px-0.5 rounded">{part}</span>;
+                  }
+                  return part;
+                })}
               </p>
+              
+              {msg.isConflicting && (
+                <div className="mt-1 flex items-center space-x-1 text-rose-400 text-[9px] font-bold uppercase tracking-wider">
+                  <ShieldAlert className="w-2.5 h-2.5" />
+                  <span>Conflicting Intel Detected</span>
+                </div>
+              )}
             </div>
           );
         })
