@@ -130,7 +130,7 @@ function CommanderExercise({ id }: { id: string }) {
   return (
     <AppShell pageTitle={`OFFLINE — ${exercise.id}`} role="commander">
       {/* ─── Custom full-height layout — no extra vertical scroll ─── */}
-      <div className="flex flex-col h-full -mt-8 -mx-8 overflow-hidden">
+      <div className="flex flex-col h-[calc(100dvh-3.5rem)] -m-4 md:-m-8 overflow-hidden">
 
         {/* ═══════════════════════════════════════════════
             COMMAND BAR
@@ -244,27 +244,16 @@ function CommanderExercise({ id }: { id: string }) {
         {/* ═══════════════════════════════════════════════
             MAIN CONTENT AREA
         ═══════════════════════════════════════════════ */}
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
 
-          {/* ─── DESKTOP: 4-panel grid ─── */}
-          <div className="hidden xl:grid xl:grid-cols-[minmax(360px,1fr)_220px_240px_280px] h-full divide-x divide-[#D9D8CE]">
-            {/* Col 1: Tactical Map */}
-            <div className="overflow-hidden p-4 bg-[#F7F5EE]">
+          {/* Desktop: keep the map prominent with a scrolling information column. */}
+          <div className="hidden xl:grid xl:grid-cols-[minmax(0,1fr)_340px] h-full min-h-0 divide-x divide-[#D9D8CE]">
+            <div className="min-w-0 overflow-hidden p-4 bg-[#F7F5EE]">
               <OfflineMap state={state} engine={engine} />
             </div>
-
-            {/* Col 2: Situation */}
-            <div className="overflow-y-auto p-4 bg-white">
+            <div className="overflow-y-auto p-4 bg-[#F7F5EE] space-y-4">
               <OfflineSituation state={state} />
-            </div>
-
-            {/* Col 3: Communications */}
-            <div className="overflow-y-auto p-4 bg-white">
               <OfflineComms state={state} engine={engine} />
-            </div>
-
-            {/* Col 4: Decision */}
-            <div className="overflow-y-auto p-4 bg-[#F7F5EE]">
               <OfflineDecision state={state} engine={engine} />
             </div>
           </div>
@@ -272,7 +261,7 @@ function CommanderExercise({ id }: { id: string }) {
           {/* ─── MOBILE: Single tab view ─── */}
           <div className="xl:hidden h-full overflow-y-auto p-4 bg-[#F7F5EE]">
             {activeTab === "map" && (
-              <div className="h-[480px]">
+              <div className="h-[640px]">
                 <OfflineMap state={state} engine={engine} />
               </div>
             )}

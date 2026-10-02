@@ -42,6 +42,8 @@ export interface ScenarioEventPayload {
   faction?: "friendly" | "hostile" | "neutral" | "unknown";
   communicationStatus?: "NORMAL" | "DELAYED" | "DEGRADED" | "LOST";
   
+  activityMarker?: ActivityMarker;
+  movementDurationSeconds?: number;
   [key: string]: unknown;
 }
 
@@ -64,6 +66,7 @@ export interface TacticalUnit {
   x: number;
   y: number;
   heading?: number;
+  destination?: { x: number; y: number };
   status: "operational" | "moving" | "damaged" | "unknown";
   sector?: string;
   communicationStatus?: "NORMAL" | "DELAYED" | "DEGRADED" | "LOST";
@@ -86,5 +89,6 @@ export interface Scenario {
   durationSeconds: number;
   operationalArea: string;
   initialUnits: TacticalUnit[];
+  initialActivityMarkers?: ActivityMarker[];
   events: ScenarioEvent[];
 }

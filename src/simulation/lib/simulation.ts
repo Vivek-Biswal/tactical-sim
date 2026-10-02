@@ -1,8 +1,9 @@
 import { ExerciseState, AARReportData, SimulationEventLog } from "../types/exercise";
-import { Scenario, ScenarioEvent } from "../types/scenario";
+import { Scenario, ScenarioEvent, ActivityMarker } from "../types/scenario";
 import { RadioMessage, MessageSenderRole, MessageType, DeliveryStatus } from "../types/communication";
 import { DecisionRecord, DecisionPoint } from "../types/decision";
 import { getDemoScenario } from "../data/demoScenario";
+import { advanceUnit, clampPoint, type Point } from "./mapGeometry";
 const formatSimTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
 export class LocalSimulationEngine {
@@ -13,10 +14,13 @@ export class LocalSimulationEngine {
   private triggeredEventIds: Set<string> = new Set();
   private startTimestamp: number = Date.now();
   private lastMapUpdateSecond = 0;
+  private movements = new Map<string, { target: Point; speed: number }>();
+  private trueActivityMarkers: ActivityMarker[] = [];
 
   constructor(exerciseId: string = "exercise-demo-1", isDemo: boolean = true) {
     this.scenario = getDemoScenario(isDemo);
     this.state = this.createInitialState(exerciseId, isDemo);
+    this.trueActivityMarkers = structuredClone(this.state.activityMarkers);
   }
 
   private createInitialState(exerciseId: string, isDemo: boolean): ExerciseState {
@@ -40,16 +44,7 @@ export class LocalSimulationEngine {
       mapLastUpdated: "Live Telemetry Active",
       units: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       trueUnits: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
-      activityMarkers: [
-        {
-          id: "act-1",
-          label: "Sector 3 Checkpoint",
-          x: 380,
-          y: 280,
-          type: "checkpoint",
-          status: "active"
-        }
-      ],
+      activityMarkers: structuredClone(this.scenario.initialActivityMarkers ?? []),
       availableInformation: [
         "Satellite GPS Track (Normal)",
         "Direct VHF Radio Uplink (Clear)",
@@ -101,6 +96,13 @@ export class LocalSimulationEngine {
     if (this.state.status === "running" || this.state.status === "completed") return;
     this.state.status = "running";
     this.logEvent("Exercise Started", `Simulation commenced (${this.state.isDemo ? "Fast Demo 2m" : "Standard 10m"})`, "system");
+    for (const event of this.scenario.events) {
+      if (!this.triggeredEventIds.has(event.id) && event.triggerTime <= this.state.elapsedSeconds) {
+        this.triggeredEventIds.add(event.id);
+        this.triggerScenarioEvent(event);
+      }
+    }
+    this.refreshMap();
     this.notify();
 
     if (!this.timerId) {
@@ -133,6 +135,7 @@ export class LocalSimulationEngine {
   }
 
   public setSpeed(multiplier: number) {
+    if (!Number.isFinite(multiplier) || multiplier <= 0) return;
     this.state.speedMultiplier = multiplier;
     this.notify();
   }
@@ -145,9 +148,11 @@ export class LocalSimulationEngine {
     const demo = isDemo !== undefined ? isDemo : this.state.isDemo;
     this.scenario = getDemoScenario(demo);
     this.triggeredEventIds.clear();
+    this.movements.clear();
     this.lastMapUpdateSecond = 0;
     this.startTimestamp = Date.now();
     this.state = this.createInitialState(this.state.exerciseId, demo);
+    this.trueActivityMarkers = structuredClone(this.state.activityMarkers);
     this.notify();
   }
 
@@ -167,7 +172,8 @@ export class LocalSimulationEngine {
   public tick(deltaSeconds: number = 1.0) {
     if (this.state.status !== "running") return;
 
-    const effectiveDelta = deltaSeconds * this.state.speedMultiplier;
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return;
+    const effectiveDelta = Math.min(deltaSeconds * this.state.speedMultiplier, this.state.totalDuration - this.state.elapsedSeconds);
     this.state.elapsedSeconds += effectiveDelta;
     this.state.formattedTime = formatSimTime(this.state.elapsedSeconds);
     this.state.progressPercent = Math.min(
@@ -175,7 +181,14 @@ export class LocalSimulationEngine {
       Math.round((this.state.elapsedSeconds / Math.max(1, this.state.totalDuration)) * 100)
     );
 
-    // Units only move via explicit scenario events now.
+    for (const [id, movement] of this.movements) {
+      const unit = this.state.trueUnits?.find(u => u.id === id);
+      if (!unit) { this.movements.delete(id); continue; }
+      if (advanceUnit(unit, movement.target, movement.speed * effectiveDelta)) {
+        this.movements.delete(id);
+        this.logEvent("Team Arrived", `${unit.name} reached its destination`, "UNIT_MOVE", { targetUnitId: id, x: unit.x, y: unit.y, status: unit.status });
+      }
+    }
     
     // Process pending messages (Phase 4)
     const remainingPending: RadioMessage[] = [];
@@ -218,9 +231,39 @@ export class LocalSimulationEngine {
     this.notify();
   }
 
+  /** Local training movement uses fictional grid units, not real-world speed. */
+  public moveTeam(id: string, destination: Point): boolean {
+    const unit = this.state.trueUnits?.find(u => u.id === id);
+    if (this.state.status !== "running" || this.state.mapStatus !== "current" || unit?.faction !== "friendly" || !Number.isFinite(destination.x) || !Number.isFinite(destination.y)) return false;
+    this.queueMovement(id, destination);
+    this.refreshMap();
+    this.notify();
+    return true;
+  }
+
+  private queueMovement(id: string, destination: Point, duration?: number) {
+    const unit = this.state.trueUnits?.find(u => u.id === id);
+    if (!unit || !Number.isFinite(destination.x) || !Number.isFinite(destination.y)) return;
+    const target = clampPoint(destination);
+    const distance = Math.hypot(target.x - unit.x, target.y - unit.y);
+    const speed = duration && duration > 0 ? distance / duration : 20;
+    unit.destination = target;
+    unit.status = "moving";
+    this.movements.set(id, { target, speed });
+    this.logEvent("Team Movement Ordered", `${unit.name} moving to ${Math.round(target.x)}, ${Math.round(target.y)}`, "UNIT_MOVE", { targetUnitId: id, fromX: unit.x, fromY: unit.y, destination: target, speed });
+  }
+
+  private updateActivity(marker: ActivityMarker) {
+    const index = this.trueActivityMarkers.findIndex(m => m.id === marker.id);
+    const value = { ...marker, ...clampPoint(marker) };
+    if (index < 0) this.trueActivityMarkers.push(value);
+    else this.trueActivityMarkers[index] = value;
+  }
+
   private refreshMap() {
     if (this.state.mapStatus === "current") {
       this.state.units = JSON.parse(JSON.stringify(this.state.trueUnits));
+      this.state.activityMarkers = structuredClone(this.trueActivityMarkers);
       this.lastMapUpdateSecond = this.state.elapsedSeconds;
       this.state.mapLastUpdated = `Updated at ${this.state.formattedTime}`;
     } else if (this.state.mapStatus === "unavailable") {
@@ -238,6 +281,7 @@ export class LocalSimulationEngine {
   private triggerScenarioEvent(evt: ScenarioEvent) {
     const payload = evt.payload;
     if (payload.mapStatus) this.state.mapStatus = payload.mapStatus;
+    if (payload.activityMarker) this.updateActivity(payload.activityMarker);
     this.logEvent(evt.title, evt.description, evt.type, payload);
 
     if (payload.availableInfo) {
@@ -251,8 +295,12 @@ export class LocalSimulationEngine {
       if (payload.targetUnitId && this.state.trueUnits) {
         const unit = this.state.trueUnits.find(u => u.id === payload.targetUnitId);
         if (unit) {
-          if (payload.x !== undefined) unit.x = payload.x as number;
-          if (payload.y !== undefined) unit.y = payload.y as number;
+          if (evt.type === "UNIT_MOVE" && typeof payload.x === "number" && typeof payload.y === "number") {
+            this.queueMovement(unit.id, { x: payload.x, y: payload.y }, payload.movementDurationSeconds);
+          } else {
+            if (typeof payload.x === "number") unit.x = clampPoint({ x: payload.x, y: unit.y }).x;
+            if (typeof payload.y === "number") unit.y = clampPoint({ x: unit.x, y: payload.y }).y;
+          }
           if (payload.heading !== undefined) unit.heading = payload.heading as number;
           if (payload.status !== undefined) unit.status = payload.status as any;
           if (payload.faction !== undefined) unit.faction = payload.faction as any;
@@ -476,8 +524,9 @@ export class LocalSimulationEngine {
          if (unit) {
             if (consequence.sector) unit.sector = consequence.sector as string;
             if (consequence.status) unit.status = consequence.status as any;
-            if (consequence.x !== undefined) unit.x = consequence.x as number;
-            if (consequence.y !== undefined) unit.y = consequence.y as number;
+            if (typeof consequence.x === "number" && typeof consequence.y === "number") {
+              this.queueMovement(unit.id, { x: consequence.x, y: consequence.y });
+            }
             
             this.logEvent("Unit Moved (Decision Consequence)", `Unit ${unit.name} moving based on commander order`, "UNIT_MOVE", {
               targetUnitId: unit.id,
@@ -525,6 +574,8 @@ export class LocalSimulationEngine {
     } else if (action === "move_unit") {
       const unit = this.state.trueUnits?.find(u => u.id === payload?.targetUnitId);
       if (unit) {
+        this.movements.delete(unit.id);
+        delete unit.destination;
         if (typeof payload?.x === "number") unit.x = payload.x;
         if (typeof payload?.y === "number") unit.y = payload.y;
         unit.sector = payload?.sector as string || unit.sector;

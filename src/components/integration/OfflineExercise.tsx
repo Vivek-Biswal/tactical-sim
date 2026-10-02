@@ -34,9 +34,10 @@ export function OfflineMap({ state, engine }: { state: ExerciseState; engine: Lo
       <button className={button} onClick={() => engine.reset()}>Reset</button>
       <button className={button} onClick={() => engine.end()} disabled={state.status === "completed"}>End</button>
       <button className={button} onClick={exportReport}>Export AAR</button>
+      <label className="text-[10px] font-bold text-[#687066]">Map feed <select aria-label="Map feed" value={state.mapStatus} onChange={event => engine.applyInstructorInject(event.target.value === "current" ? "restore_map" : event.target.value === "outdated" ? "outdate_map" : "unavailable_map")} className="ml-1 rounded border border-[#D9D8CE] bg-white p-2"><option value="current">CURRENT</option><option value="outdated">OUTDATED</option><option value="unavailable">UNAVAILABLE</option></select></label>
     </div>
-    <TacticalMap units={state.units} activityMarkers={state.activityMarkers} mapStatus={state.mapStatus} mapLastUpdated={state.mapLastUpdated} className="flex-1 min-h-0" />
-    <p className="text-[10px] text-[#687066]">Fictional local grid. Select a unit for details. Movement and degradation follow the scenario timeline.</p>
+    <TacticalMap units={state.units} activityMarkers={state.activityMarkers} mapStatus={state.mapStatus} mapLastUpdated={state.mapLastUpdated} movementEnabled={state.status === "running"} onUnitMove={(id, point) => { engine.moveTeam(id, point); }} className="flex-1 min-h-0" />
+    <p className="text-[10px] text-[#687066]">Fictional local grid. Select a unit for details. Select a friendly team to set a destination. Movement and degradation follow the simulation clock.</p>
   </div>;
 }
 
@@ -49,7 +50,7 @@ export function OfflineSituation({ state }: { state: ExerciseState }) {
     <h3 className="mt-5 text-[10px] font-black uppercase text-[#A94A3F]">Unavailable information</h3>
     <ul className="mt-2 space-y-2 text-xs text-[#687066]">{state.unavailableInformation.length ? state.unavailableInformation.map(info => <li key={info}>{info}</li>) : <li>None reported</li>}</ul>
     <h3 className="mt-5 text-[10px] font-black uppercase text-[#344438]">Exercise timeline</h3>
-    <ol className="mt-2 space-y-3 text-xs text-[#687066]">{state.eventLog.slice(-6).reverse().map(event => <li key={event.id}><span className="font-mono text-[#8A5C2A]">{event.time}</span> {event.title}</li>)}</ol>
+    <ol className="mt-2 space-y-3 text-xs text-[#687066]">{state.eventLog.filter(event => state.mapStatus === "current" || !["UNIT_MOVE", "CONTACT_DETECTED", "STATUS_CHANGE"].includes(event.category)).slice(-6).reverse().map(event => <li key={event.id}><span className="font-mono text-[#8A5C2A]">{event.time}</span> {event.title}</li>)}</ol>
   </PanelCard>;
 }
 

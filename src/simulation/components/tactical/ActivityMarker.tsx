@@ -1,69 +1,13 @@
-import React from "react";
-import { ActivityMarker as ActivityMarkerType } from "../../types/scenario";
-
-interface ActivityMarkerProps {
-  marker: ActivityMarkerType;
-  onClick?: () => void;
+import type { ActivityMarker as Activity } from "../../types/scenario";
+interface Props { marker: Activity; onSelect?: () => void; selected?: boolean; isStale?: boolean }
+export function ActivityMarker({ marker, onSelect, selected, isStale }: Props) {
+  const color = marker.status==="cleared" ? "#687066" : marker.type==="hostile_jammer" ? "#A94A3F" : marker.type==="contact_warning" ? "#B87A3A" : "#556B3F";
+  const left = marker.x>600;
+  return <g data-marker="activity" transform={`translate(${marker.x},${marker.y})`} role="button" tabIndex={0} aria-label={`Inspect ${marker.label}`} aria-pressed={!!selected} className="cursor-pointer"
+    onClick={e=>{e.stopPropagation();onSelect?.();}} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();onSelect?.();}}}>
+    <title>{`${marker.label} · ${marker.type} · ${marker.status}${isStale?" · Last known":""}`}</title>
+    <circle r={selected?28:22} fill={color} fillOpacity={0.08} stroke={color} strokeDasharray="3 4" />
+    {marker.type==="hostile_jammer" ? <><circle r={38} fill="none" stroke={color} strokeOpacity={0.35}/><path d="M0 -13 L13 0 L0 13 L-13 0 Z" fill="#FAF0EF" stroke={color}/><text y={4} textAnchor="middle" fontSize={10} fontWeight="bold" fill={color}>EW</text></> : marker.type==="contact_warning" ? <><path d="M0 -12 L12 10 L-12 10 Z" fill="#FDF3E3" stroke={color}/><text y={6} textAnchor="middle" fontSize={13} fill={color}>!</text></> : marker.type==="objective" ? <><circle r={12} fill="white" stroke={color}/><path d="M-17 0 H17 M0 -17 V17" stroke={color}/></> : <><path d="M-10 -6 L0 -12 L10 -6 L10 6 L0 12 L-10 6 Z" fill="white" stroke={color}/><circle r={4} fill={color}/></>}
+    <text x={left?-28:28} y={4} textAnchor={left?"end":"start"} fill={color} stroke="#F7F5EE" strokeWidth={3} paintOrder="stroke" fontSize={10} fontWeight="bold">{marker.label}</text>
+  </g>;
 }
-
-export const ActivityMarker: React.FC<ActivityMarkerProps> = ({ marker, onClick }) => {
-  if (marker.type === "hostile_jammer") {
-    return (
-      <g transform={`translate(${marker.x}, ${marker.y})`} className="cursor-pointer select-none" onClick={onClick}>
-        {/* Concentric EW Radio Interference Waves */}
-        <circle r="40" fill="none" stroke="#A94A3F" strokeWidth="1" strokeDasharray="3,3" opacity="0.3" className="animate-ping" />
-        <circle r="25" fill="none" stroke="#A94A3F" strokeWidth="1.5" strokeDasharray="4,2" opacity="0.6" />
-        
-        {/* Hostile Diamond Icon */}
-        <path d="M 0 -14 L 14 0 L 0 14 L -14 0 Z" fill="#450a0a" stroke="#A94A3F" strokeWidth="2" />
-        <text x="0" y="4" textAnchor="middle" fill="#A94A3F" fontSize="10" fontWeight="bold">
-          EW
-        </text>
-
-        {/* Label Box */}
-        <g transform="translate(18, -12)">
-          <rect x="-4" y="-8" width="175" height="18" fill="#FFFFFF" fillOpacity="0.9" stroke="#A94A3F" rx="2" />
-          <text x="0" y="4" fill="#f87171" fontSize="9.5" fontWeight="bold" fontFamily="monospace">
-            {marker.label}
-          </text>
-        </g>
-      </g>
-    );
-  }
-
-  if (marker.type === "contact_warning") {
-    return (
-      <g transform={`translate(${marker.x}, ${marker.y})`} className="cursor-pointer select-none" onClick={onClick}>
-        {/* Radar Ring */}
-        <circle r="20" fill="#78350f" fillOpacity="0.3" stroke="#B87A3A" strokeWidth="1.5" strokeDasharray="2,2" className="animate-pulse" />
-        
-        {/* Warning Triangle */}
-        <path d="M 0 -10 L 10 8 L -10 8 Z" fill="#1c1917" stroke="#B87A3A" strokeWidth="1.8" />
-        <text x="0" y="5" textAnchor="middle" fill="#B87A3A" fontSize="10" fontWeight="bold">
-          ?
-        </text>
-
-        {/* Label */}
-        <g transform="translate(14, -8)">
-          <rect x="-2" y="-6" width="180" height="16" fill="#FFFFFF" fillOpacity="0.9" stroke="#B87A3A" rx="2" />
-          <text x="2" y="5" fill="#fbbf24" fontSize="9" fontWeight="bold" fontFamily="monospace">
-            {marker.label}
-          </text>
-        </g>
-      </g>
-    );
-  }
-
-  // Checkpoint or Default
-  return (
-    <g transform={`translate(${marker.x}, ${marker.y})`} className="cursor-pointer select-none" onClick={onClick}>
-      <circle r="12" fill="#FFFFFF" stroke="#556B3F" strokeWidth="1.5" strokeDasharray="2,2" />
-      <circle r="4" fill="#556B3F" />
-      <g transform="translate(16, -6)">
-        <text x="0" y="8" fill="#556B3F" fontSize="9" fontFamily="monospace">
-          {marker.label}
-        </text>
-      </g>
-    </g>
-  );
-};

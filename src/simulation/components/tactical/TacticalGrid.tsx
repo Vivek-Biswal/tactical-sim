@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useId } from "react";
 
 interface TacticalGridProps {
   width?: number;
@@ -6,25 +6,26 @@ interface TacticalGridProps {
 }
 
 export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height = 600 }) => {
+  const id = useId();
   const gridSize = 50;
   const cols = Math.floor(width / gridSize);
   const rows = Math.floor(height / gridSize);
 
   return (
-    <g className="tactical-grid opacity-30 select-none pointer-events-none">
+    <g className="tactical-grid opacity-60 select-none pointer-events-none">
       <defs>
-        <pattern id="grid-pattern" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
+        <pattern id={id} width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
           <path
             d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`}
             fill="none"
-            stroke="#D9D8CE"
+            stroke="#B8BBAA"
             strokeWidth="0.8"
             strokeDasharray="2,2"
           />
         </pattern>
       </defs>
 
-      <rect width={width} height={height} fill="url(#grid-pattern)" />
+      <rect width={width} height={height} fill={`url(#${id})`} />
 
       {/* Grid Coordinates */}
       {Array.from({ length: cols }).map((_, i) => (

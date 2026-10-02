@@ -13,6 +13,10 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
       "A high-stress multi-domain tactical scenario testing commander situational awareness, hypothesis testing, and decisive leadership during electromagnetic interference, conflicting subunit SITREPs, and COP telemetry failure.",
     durationSeconds: durationSeconds,
     operationalArea: "Sector 7 - Obsidian Ridge / Defile Bravo",
+    initialActivityMarkers: [
+      { id: "checkpoint-7a", label: "Checkpoint 7A", x: 380, y: 280, type: "checkpoint", status: "active" },
+      { id: "objective-7", label: "Observation objective", x: 590, y: 110, type: "objective", status: "active" },
+    ],
     initialUnits: [
       {
         id: "unit-alpha",
@@ -107,7 +111,8 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
           targetUnitId: "unit-alpha",
           status: "moving",
           x: 280,
-          y: 350
+          y: 350,
+          movementDurationSeconds: 8
         }
       },
       {
@@ -117,6 +122,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         title: "UAV Detection",
         description: "UAV detects unknown contact.",
         payload: {
+          activityMarker: { id: "warning-7", label: "Unverified activity", x: 320, y: 190, type: "contact_warning", status: "unverified" },
           targetUnitId: "contact-2",
           status: "unknown",
           x: 270,
@@ -143,6 +149,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         title: "Comms Degradation: DELAYED",
         description: "Electronic interference detected. Radio latency increasing.",
         payload: {
+          activityMarker: { id: "jammer-7", label: "Suspected jammer", x: 660, y: 260, type: "hostile_jammer", status: "high_threat" },
           commsStatus: "delayed",
           radioDelaySeconds: 8,
           messageLossPercentage: 0,
@@ -287,6 +294,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         title: "Comms Restored — Normal",
         description: "Counter-EW measures effective. Radio net re-established.",
         payload: {
+          activityMarker: { id: "jammer-7", label: "Jammer cleared", x: 660, y: 260, type: "hostile_jammer", status: "cleared" },
           commsStatus: "normal",
           mapStatus: "current",
           radioDelaySeconds: 0,

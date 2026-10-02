@@ -1,124 +1,16 @@
-import React from "react";
-import { TacticalUnit } from "../../types/scenario";
-
-interface TeamMarkerProps {
-  unit: TacticalUnit;
-  isSelected?: boolean;
-  onClick?: (e: React.MouseEvent) => void;
-  isStale?: boolean;
+import type { TacticalUnit } from "../../types/scenario";
+interface Props { unit: TacticalUnit; isSelected?: boolean; onSelect?: () => void; isStale?: boolean }
+export function TeamMarker({ unit, isSelected = false, onSelect, isStale = false }: Props) {
+  const color = isStale ? "#687066" : { friendly:"#556B3F", hostile:"#A94A3F", neutral:"#486D87", unknown:"#B87A3A" }[unit.faction];
+  const label = unit.callsign || unit.name;
+  const left = unit.x > 640;
+  return <g data-marker="unit" role="button" tabIndex={0} aria-label={`Select ${unit.name}`} aria-pressed={isSelected}
+    style={{transform:`translate(${unit.x}px, ${unit.y}px)`}} className={`cursor-pointer ${isStale ? "" : "motion-safe:transition-transform motion-safe:duration-1000 motion-safe:ease-linear"}`}
+    onClick={e=>{e.stopPropagation();onSelect?.();}} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();onSelect?.();}}}>
+    <title>{`${unit.name} · ${unit.faction} · ${unit.status}${isStale ? " · Last known position" : ""}`}</title>
+    <circle r={isSelected?23:18} fill={isSelected?"#EFE8D8":"#FFFFFF"} fillOpacity={0.8} stroke={color} strokeWidth={isSelected?2:1} strokeDasharray={isStale?"4 4":undefined}/>
+    {unit.heading!==undefined && <line x1={0} y1={0} x2={Math.sin(unit.heading*Math.PI/180)*29} y2={-Math.cos(unit.heading*Math.PI/180)*29} stroke={color} strokeWidth={2}/>}
+    {unit.faction==="hostile" ? <path d="M0 -12 L12 0 L0 12 L-12 0 Z" fill="#FAF0EF" stroke={color} strokeWidth={2}/> : unit.faction==="unknown" ? <><path d="M0 -12 L12 10 L-12 10 Z" fill="#FDF3E3" stroke={color} strokeWidth={2}/><text y={6} textAnchor="middle" fontSize={14} fontWeight="bold" fill={color}>?</text></> : <><rect x={-12} y={-9} width={24} height={18} rx={2} fill="#EEF3E8" stroke={color} strokeWidth={2}/><path d="M-8 -5 L8 5 M-8 5 L8 -5" stroke={color} strokeWidth={1.5}/></>}
+    <g transform={`translate(${left?-22:22},-5)`}><rect x={left?-(label.length*7+8):-3} y={-10} width={label.length*7+8} height={18} fill="white" fillOpacity={0.9} rx={3}/><text textAnchor={left?"end":"start"} y={3} fill={color} fontSize={11} fontWeight="bold">{label}</text><text textAnchor={left?"end":"start"} y={20} fill="#687066" fontSize={9}>{isStale?"LAST KNOWN":`${Math.round(unit.x)}, ${Math.round(unit.y)}`}</text></g>
+  </g>;
 }
-
-export const TeamMarker: React.FC<TeamMarkerProps> = ({
-  unit,
-  isSelected = false,
-  onClick,
-  isStale = false
-}) => {
-  const isObjective = unit.id === "objective-bravo";
-  const isHostile = unit.faction === "hostile";
-
-  const mainColor = isHostile
-    ? "#A94A3F" // Hostile: Red
-    : unit.faction === "unknown"
-    ? "#B87A3A"
-    : isObjective
-    ? "#B87A3A" // Objective: amber
-    : isStale
-    ? "#687066" // Stale: muted gray
-    : "#556B3F"; // Friendly: Chakravyuh olive
-
-  return (
-    <g
-      transform={`translate(${unit.x}, ${unit.y})`}
-      className="cursor-pointer transition-transform duration-500 ease-out select-none"
-      role="button"
-      tabIndex={0}
-      aria-label={`Select ${unit.name}`}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(e as unknown as React.MouseEvent); } }}
-      onClick={onClick}
-    >
-      <title>{`${unit.name} (${unit.type || unit.role})\nStatus: ${unit.status.toUpperCase()}`}</title>
-      {/* Outer Glow / Ping */}
-      <circle
-        r={isSelected ? "22" : "16"}
-        fill="none"
-        stroke={mainColor}
-        strokeWidth="1.5"
-        strokeDasharray={isStale ? "4,4" : "none"}
-        opacity={isStale ? 0.4 : 0.7}
-        className={isStale ? "" : "animate-pulse"}
-      />
-
-      {/* Heading Azimuth Line */}
-      {unit.heading !== undefined && (
-        <line
-          x1="0"
-          y1="0"
-          x2={Math.cos(((unit.heading - 90) * Math.PI) / 180) * 24}
-          y2={Math.sin(((unit.heading - 90) * Math.PI) / 180) * 24}
-          stroke={mainColor}
-          strokeWidth="2"
-        />
-      )}
-
-      {/* Main Tactical Symbol Box */}
-      <rect
-        x="-11"
-        y="-11"
-        width="22"
-        height="22"
-        fill="#FFFFFF"
-        stroke={mainColor}
-        strokeWidth="2"
-        rx="3"
-      />
-
-      {/* NATO Friendly / Objective Glyph */}
-      {(isHostile || isObjective) ? (
-        // Waypoint / Hostile Diamond
-        <path d="M 0 -6 L 6 0 L 0 6 L -6 0 Z" fill={mainColor} />
-      ) : (
-        // Friendly Infantry / Recon Cross
-        <g stroke={mainColor} strokeWidth="1.5">
-          <line x1="-6" y1="-6" x2="6" y2="6" />
-          <line x1="-6" y1="6" x2="6" y2="-6" />
-        </g>
-      )}
-
-      {/* Callsign & Role Badge */}
-      <g transform="translate(18, -4)">
-        <rect
-          x="-2"
-          y="-10"
-          width={unit.name.length * 6.8 + 8}
-          height="16"
-          fill="#FFFFFF"
-          fillOpacity="0.85"
-          stroke="#D9D8CE"
-          rx="2"
-        />
-        <text
-          x="2"
-          y="2"
-          fill={mainColor}
-          fontSize="10"
-          fontWeight="bold"
-          fontFamily="monospace"
-        >
-          {unit.callsign || unit.name}
-        </text>
-      </g>
-
-      {/* Coordinates / Status Pill */}
-      <text
-        x="18"
-        y="18"
-        fill="#687066"
-        fontSize="8"
-        fontFamily="monospace"
-      >
-        {isStale ? "[STALE COP]" : `${Math.round(unit.x)},${Math.round(unit.y)}`}
-      </text>
-    </g>
-  );
-};
