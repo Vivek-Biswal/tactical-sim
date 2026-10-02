@@ -1,0 +1,42 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const original = require.extensions['.ts'];
+require.extensions['.ts'] = (module, filename) => {
+  const compiled = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } });
+  module._compile(compiled.outputText, filename);
+};
+const { LocalSimulationEngine } = require('../frontend/lib/simulation.ts');
+const engine = new LocalSimulationEngine('test');
+try {
+  engine.start(); engine.dispose();
+  engine.tick(20);
+  assert.notDeepEqual(engine.getState().units, engine.generateAAR().initialUnits, 'scenario movement reaches map');
+  engine.applyInstructorInject('outdate_map');
+  const frozen = engine.getState().units;
+  engine.applyInstructorInject('move_unit', { targetUnitId: 'unit-alpha', x: 700, y: 400 });
+  engine.tick(5);
+  assert.deepEqual(engine.getState().units, frozen, 'outdated map does not leak ground truth');
+  assert.match(engine.getState().mapLastUpdated, /5s old/, 'freshness measured from last update');
+  assert.equal(engine.getState().trueUnits.find(u => u.id === 'unit-alpha').x, 700);
+  engine.applyInstructorInject('unavailable_map');
+  assert.equal(engine.getState().mapStatus, 'unavailable');
+  engine.applyInstructorInject('restore_map');
+  assert.equal(engine.getState().units.find(u => u.id === 'unit-alpha').x, 700, 'restoration catches up immediately');
+  engine.applyInstructorInject('set_comms', { status: 'delayed', delay: 3 });
+  const delayed = engine.sendRadioMessage('Alpha', 'TEAM_ALPHA', 'Test report');
+  assert.equal(delayed.deliveryStatus, 'DELAYED');
+  engine.tick(3);
+  assert.ok(engine.getState().messages.some(m => m.id === delayed.id && m.deliveryStatus === 'DELIVERED'));
+  engine.applyInstructorInject('set_comms', { status: 'offline' });
+  assert.equal(engine.sendRadioMessage('Alpha', 'TEAM_ALPHA', 'Withheld report').deliveryStatus, 'DROPPED');
+  engine.applyInstructorInject('decision_point', { title: 'Test decision', options: [{ id: 'move', label: 'Move', consequence: { type: 'move_unit', targetUnitId: 'unit-alpha', x: 600 } }] });
+  engine.submitDecision('Move', 'Verified independent sources', 'medium', 'COMMANDER_1', 'move');
+  const aar = engine.generateAAR();
+  assert.equal(aar.decisions[0].rationale, 'Verified independent sources');
+  assert.ok(aar.fullEventLog.length);
+  engine.reset();
+  assert.equal(engine.getState().elapsedSeconds, 0);
+  assert.equal(engine.getState().decisions.length, 0);
+  console.log('PASS: movement, stale freeze, freshness, unavailable/restore, delayed/drop delivery, decision rationale, AAR, reset');
+} finally { engine.dispose(); require.extensions['.ts'] = original; }

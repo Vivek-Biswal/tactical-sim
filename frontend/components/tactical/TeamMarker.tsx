@@ -15,20 +15,26 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
   isStale = false
 }) => {
   const isObjective = unit.id === "objective-bravo";
-  const isHostile = unit.id.startsWith("contact");
+  const isHostile = unit.faction === "hostile";
 
   const mainColor = isHostile
-    ? "#ef4444" // Hostile: Red
+    ? "#A94A3F" // Hostile: Red
+    : unit.faction === "unknown"
+    ? "#B87A3A"
     : isObjective
-    ? "#f59e0b" // Objective: amber
+    ? "#B87A3A" // Objective: amber
     : isStale
-    ? "#94a3b8" // Stale: muted gray
-    : "#38bdf8"; // Friendly: tactical cyan
+    ? "#687066" // Stale: muted gray
+    : "#556B3F"; // Friendly: Chakravyuh olive
 
   return (
     <g
       transform={`translate(${unit.x}, ${unit.y})`}
       className="cursor-pointer transition-transform duration-500 ease-out select-none"
+      role="button"
+      tabIndex={0}
+      aria-label={`Select ${unit.name}`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(e as unknown as React.MouseEvent); } }}
       onClick={onClick}
     >
       <title>{`${unit.name} (${unit.type || unit.role})\nStatus: ${unit.status.toUpperCase()}`}</title>
@@ -61,7 +67,7 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
         y="-11"
         width="22"
         height="22"
-        fill="#090d16"
+        fill="#FFFFFF"
         stroke={mainColor}
         strokeWidth="2"
         rx="3"
@@ -86,9 +92,9 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
           y="-10"
           width={unit.name.length * 6.8 + 8}
           height="16"
-          fill="#090d16"
+          fill="#FFFFFF"
           fillOpacity="0.85"
-          stroke="#1e293b"
+          stroke="#D9D8CE"
           rx="2"
         />
         <text
@@ -107,7 +113,7 @@ export const TeamMarker: React.FC<TeamMarkerProps> = ({
       <text
         x="18"
         y="18"
-        fill="#64748b"
+        fill="#687066"
         fontSize="8"
         fontFamily="monospace"
       >

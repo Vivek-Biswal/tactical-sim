@@ -181,6 +181,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         description: "Hostile jammer activation suspected. Partial signal loss and garbled transmissions.",
         payload: {
           commsStatus: "degraded",
+          mapStatus: "outdated",
           radioDelaySeconds: 15,
           messageLossPercentage: 30,
           allowIncompleteReports: true,
@@ -258,6 +259,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         description: "All radio communications severed. Hostile jammer at full power.",
         payload: {
           commsStatus: "offline",
+          mapStatus: "unavailable",
           radioDelaySeconds: 0,
           messageLossPercentage: 100,
           allowIncompleteReports: false,
@@ -286,6 +288,7 @@ export function getDemoScenario(isDemo: boolean = true): Scenario {
         description: "Counter-EW measures effective. Radio net re-established.",
         payload: {
           commsStatus: "normal",
+          mapStatus: "current",
           radioDelaySeconds: 0,
           messageLossPercentage: 0,
           allowIncompleteReports: false,

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import { TacticalGrid } from "./TacticalGrid";
 import { TeamMarker } from "./TeamMarker";
@@ -27,7 +29,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
-  const isStale = mapStatus === "outdated";
+  const isStale = mapStatus !== "current";
+  const unavailable = mapStatus === "unavailable";
 
   const handleUnitClick = (e: React.MouseEvent, unit: TacticalUnit) => {
     e.stopPropagation();
@@ -42,26 +45,28 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const selectedUnit = units.find(u => u.id === selectedUnitId);
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.round(e.clientX - rect.left);
-    const y = Math.round(e.clientY - rect.top);
+    const matrix = e.currentTarget.getScreenCTM();
+    if (!matrix) return;
+    const point = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix.inverse());
+    const x = Math.round(point.x);
+    const y = Math.round(point.y);
     setCursorPos({ x, y });
   };
 
   return (
-    <div className={`relative w-full h-full bg-[#080c14] border border-slate-800 rounded-lg overflow-hidden flex flex-col ${className}`}>
+    <div className={`relative w-full h-full bg-[#F7F5EE] border border-[#D9D8CE] rounded-xl overflow-hidden flex flex-col ${className}`}>
       {/* Top Map HUD Bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 text-xs font-mono z-10">
+      <div className="flex flex-wrap gap-2 items-center justify-between px-3 py-1.5 bg-white/95 border-b border-[#D9D8CE] text-xs font-mono z-10">
         <div className="flex items-center space-x-3">
-          <span className="text-cyan-400 font-bold tracking-wider">COP TACTICAL DISPLAY</span>
-          <span className="text-slate-500">|</span>
-          <span className="text-slate-400">AREA: SECTOR 7 (OBSIDIAN RIDGE)</span>
+          <span className="text-[#556B3F] font-bold tracking-wider">COP TACTICAL DISPLAY</span>
+          <span className="text-[#687066]">|</span>
+          <span className="text-[#687066]">AREA: SECTOR 7 (OBSIDIAN RIDGE)</span>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-center gap-2">
           {cursorPos && (
-            <span className="text-slate-400 hidden sm:inline">
-              MGRS: <span className="text-slate-200">31U DQ {cursorPos.x.toString().padStart(3, "0")} {cursorPos.y.toString().padStart(3, "0")}</span>
+            <span className="text-[#687066] hidden sm:inline">
+              LOCAL GRID: <span className="text-[#263229]">{cursorPos.x.toString().padStart(3, "0")} {cursorPos.y.toString().padStart(3, "0")}</span>
             </span>
           )}
 
@@ -69,26 +74,26 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           <div
             className={`flex items-center space-x-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold ${
               isStale
-                ? "bg-amber-950/70 border-amber-500/60 text-amber-400 animate-pulse"
-                : "bg-emerald-950/60 border-emerald-500/50 text-emerald-400"
+                ? "bg-[#FDF3E3] border-amber-500/60 text-[#8A5C2A] animate-pulse"
+                : "bg-[#EEF3E8] border-emerald-500/50 text-[#556B3F]"
             }`}
           >
             {isStale ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-            <span>{mapLastUpdated}</span>
+            <span className="capitalize">{mapStatus}: {mapLastUpdated}</span>
           </div>
 
           {/* Zoom controls */}
           <div className="flex items-center space-x-1">
             <button
               onClick={() => setZoomLevel((z) => Math.min(1.4, z + 0.1))}
-              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
+              className="p-1 hover:bg-[#EFE8D8] rounded text-[#687066] hover:text-[#263229] transition"
               title="Zoom in"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setZoomLevel((z) => Math.max(0.8, z - 0.1))}
-              className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
+              className="p-1 hover:bg-[#EFE8D8] rounded text-[#687066] hover:text-[#263229] transition"
               title="Zoom out"
             >
               <ZoomOut className="w-3.5 h-3.5" />
@@ -96,7 +101,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             {zoomLevel !== 1 && (
               <button
                 onClick={() => setZoomLevel(1)}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition"
+                className="p-1 hover:bg-[#EFE8D8] rounded text-[#687066] hover:text-[#263229] transition"
                 title="Reset zoom"
               >
                 <RefreshCw className="w-3 h-3" />
@@ -107,7 +112,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       </div>
 
       {/* Main SVG Tactical Workspace */}
-      <div className="relative flex-1 w-full h-full overflow-hidden bg-[#070b12]">
+      <div className="relative flex-1 w-full h-full overflow-hidden bg-[#F7F5EE]">
         <svg
           viewBox="0 0 800 600"
           className="w-full h-full object-contain select-none cursor-crosshair"
@@ -119,20 +124,20 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           <defs>
             {/* Elevation Shading Gradients */}
             <radialGradient id="hill-ridge-gradient" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#1e293b" stopOpacity="0.8" />
-              <stop offset="60%" stopColor="#0f172a" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#070b12" stopOpacity="0" />
+              <stop offset="0%" stopColor="#D9D8CE" stopOpacity="0.8" />
+              <stop offset="60%" stopColor="#EFE8D8" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#F7F5EE" stopOpacity="0" />
             </radialGradient>
 
             <radialGradient id="hill-eastern-gradient" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#1e293b" stopOpacity="0.75" />
-              <stop offset="70%" stopColor="#0f172a" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#070b12" stopOpacity="0" />
+              <stop offset="0%" stopColor="#D9D8CE" stopOpacity="0.75" />
+              <stop offset="70%" stopColor="#EFE8D8" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="#F7F5EE" stopOpacity="0" />
             </radialGradient>
 
             {/* Jammer Interference Scan Overlay */}
             <pattern id="stale-scanline" width="10" height="6" patternUnits="userSpaceOnUse">
-              <line x1="0" y1="0" x2="10" y2="0" stroke="#f59e0b" strokeWidth="0.8" opacity="0.12" />
+              <line x1="0" y1="0" x2="10" y2="0" stroke="#B87A3A" strokeWidth="0.8" opacity="0.12" />
             </pattern>
 
             {/* Forest Pattern */}
@@ -160,7 +165,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
               opacity="0.8"
               strokeDasharray="10,15"
             />
-            <text x="460" y="100" fill="#38bdf8" fontSize="11" fontFamily="monospace" transform="rotate(75 460 100)" opacity="0.7">
+            <text x="460" y="100" fill="#556B3F" fontSize="11" fontFamily="monospace" transform="rotate(75 460 100)" opacity="0.7">
               SERPENT RIVER
             </text>
           </g>
@@ -184,17 +189,17 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <path
               d="M 120 220 Q 230 140 340 220 Q 240 300 120 220 Z"
               fill="none"
-              stroke="#334155"
+              stroke="#71805A"
               strokeWidth="1.2"
               strokeDasharray="4,3"
             />
             <path
               d="M 160 220 Q 230 170 300 220 Q 235 270 160 220 Z"
               fill="none"
-              stroke="#475569"
+              stroke="#687066"
               strokeWidth="1"
             />
-            <text x="180" y="225" fill="#64748b" fontSize="11" fontFamily="monospace" letterSpacing="1">
+            <text x="180" y="225" fill="#687066" fontSize="11" fontFamily="monospace" letterSpacing="1">
               ▲ WESTERN RIDGE (ELEV 420m)
             </text>
 
@@ -203,11 +208,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <path
               d="M 570 340 Q 680 250 780 340 Q 680 430 570 340 Z"
               fill="none"
-              stroke="#334155"
+              stroke="#71805A"
               strokeWidth="1.2"
               strokeDasharray="4,3"
             />
-            <text x="615" y="345" fill="#64748b" fontSize="11" fontFamily="monospace" letterSpacing="1">
+            <text x="615" y="345" fill="#687066" fontSize="11" fontFamily="monospace" letterSpacing="1">
               ▲ EASTERN CANYON BLUFFS
             </text>
 
@@ -231,14 +236,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <path
               d="M 80 560 Q 220 480 320 380 T 580 210 T 750 140"
               fill="none"
-              stroke="#334155"
+              stroke="#71805A"
               strokeWidth="8"
               strokeLinecap="round"
             />
             <path
               d="M 80 560 Q 220 480 320 380 T 580 210 T 750 140"
               fill="none"
-              stroke="#475569"
+              stroke="#687066"
               strokeWidth="2.5"
               strokeDasharray="8,6"
             />
@@ -247,14 +252,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <path
               d="M 220 380 Q 200 280 230 180 T 420 120 T 580 210"
               fill="none"
-              stroke="#1e293b"
+              stroke="#D9D8CE"
               strokeWidth="3.5"
               strokeDasharray="4,4"
             />
-            <text x="135" y="440" fill="#475569" fontSize="9" fontFamily="monospace" transform="rotate(-30 135 440)">
+            <text x="135" y="440" fill="#687066" fontSize="9" fontFamily="monospace" transform="rotate(-30 135 440)">
               MAIN HIGHWAY ROUTE
             </text>
-            <text x="210" y="300" fill="#475569" fontSize="9" fontFamily="monospace" transform="rotate(-75 210 300)">
+            <text x="210" y="300" fill="#687066" fontSize="9" fontFamily="monospace" transform="rotate(-75 210 300)">
               WESTERN RIDGE PASS (BYPASS)
             </text>
           </g>
@@ -263,28 +268,28 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           <g className="infrastructure">
             {/* Village / City Area */}
             <g transform="translate(250, 400)">
-              <rect x="0" y="0" width="80" height="60" fill="#1e293b" opacity="0.6" stroke="#475569" />
-              <rect x="10" y="10" width="20" height="15" fill="#334155" />
-              <rect x="40" y="10" width="25" height="20" fill="#334155" />
-              <rect x="15" y="35" width="45" height="15" fill="#334155" />
-              <text x="40" y="-8" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+              <rect x="0" y="0" width="80" height="60" fill="#D9D8CE" opacity="0.6" stroke="#687066" />
+              <rect x="10" y="10" width="20" height="15" fill="#71805A" />
+              <rect x="40" y="10" width="25" height="20" fill="#71805A" />
+              <rect x="15" y="35" width="45" height="15" fill="#71805A" />
+              <text x="40" y="-8" textAnchor="middle" fill="#687066" fontSize="10" fontFamily="monospace">
                 NOVA SETTLEMENT
               </text>
             </g>
             
             {/* Military Base / HQ */}
             <g transform="translate(600, 450)">
-              <polygon points="0,30 40,0 80,30 80,80 0,80" fill="#0f172a" stroke="#64748b" strokeWidth="2" strokeDasharray="5,3" />
-              <rect x="25" y="30" width="30" height="30" fill="#1e293b" stroke="#475569" />
-              <circle cx="40" cy="45" r="5" fill="#ef4444" opacity="0.8" />
-              <text x="40" y="95" textAnchor="middle" fill="#cbd5e1" fontSize="10" fontFamily="monospace" fontWeight="bold">
+              <polygon points="0,30 40,0 80,30 80,80 0,80" fill="#EFE8D8" stroke="#687066" strokeWidth="2" strokeDasharray="5,3" />
+              <rect x="25" y="30" width="30" height="30" fill="#D9D8CE" stroke="#687066" />
+              <circle cx="40" cy="45" r="5" fill="#A94A3F" opacity="0.8" />
+              <text x="40" y="95" textAnchor="middle" fill="#344438" fontSize="10" fontFamily="monospace" fontWeight="bold">
                 FOB VANGUARD (HQ)
               </text>
             </g>
 
             {/* Bridge (Highway crossing Serpent River) */}
             <g transform="translate(450, 290) rotate(-35)">
-              <rect x="-15" y="-15" width="30" height="30" fill="#1e293b" stroke="#eab308" strokeWidth="1.5" />
+              <rect x="-15" y="-15" width="30" height="30" fill="#D9D8CE" stroke="#eab308" strokeWidth="1.5" />
               <line x1="-15" y1="-5" x2="15" y2="-5" stroke="#eab308" strokeWidth="1" />
               <line x1="-15" y1="5" x2="15" y2="5" stroke="#eab308" strokeWidth="1" />
               <text x="0" y="-20" textAnchor="middle" fill="#fef08a" fontSize="8" fontFamily="monospace">
@@ -309,12 +314,12 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           />
 
           {/* Activity & Contact Markers */}
-          {activityMarkers.map((marker) => (
+          {(unavailable ? [] : activityMarkers).map((marker) => (
             <ActivityMarker key={marker.id} marker={marker} />
           ))}
 
           {/* Tactical Units */}
-          {units.map((unit) => (
+          {(unavailable ? [] : units).map((unit) => (
             <TeamMarker
               key={unit.id}
               unit={unit}
@@ -328,7 +333,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           {isStale && (
             <g className="stale-overlay pointer-events-none select-none">
               <rect width="800" height="600" fill="url(#stale-scanline)" />
-              <rect x="250" y="15" width="300" height="30" fill="#451a03" fillOpacity="0.85" stroke="#f59e0b" rx="4" />
+              <rect x="250" y="15" width="300" height="30" fill="#451a03" fillOpacity="0.85" stroke="#B87A3A" rx="4" />
               <text x="400" y="35" textAnchor="middle" fill="#fef08a" fontSize="12" fontWeight="bold" fontFamily="monospace">
                 ⚠ STALE COP TELEMETRY - SATELLITE DATA DENIED
               </text>
@@ -340,43 +345,43 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
         <MapLegend />
 
         {/* Unit Information Panel */}
-        {selectedUnit && (
-          <div className="absolute top-4 right-4 w-64 bg-slate-900/95 border border-cyan-800 rounded shadow-xl pointer-events-auto z-20 overflow-hidden">
-            <div className="bg-cyan-950 px-3 py-1.5 border-b border-cyan-800 flex justify-between items-center">
-              <span className="text-cyan-400 font-bold text-sm tracking-wider">UNIT INFO</span>
-              <button onClick={() => setSelectedUnitId(null)} className="text-slate-400 hover:text-white">&times;</button>
+        {selectedUnit && !unavailable && (
+          <div className="absolute top-4 right-4 w-64 bg-white/95 border border-[#D9D8CE] rounded shadow-xl pointer-events-auto z-20 overflow-hidden">
+            <div className="bg-[#EEF3E8] px-3 py-1.5 border-b border-[#D9D8CE] flex justify-between items-center">
+              <span className="text-[#556B3F] font-bold text-sm tracking-wider">UNIT INFO</span>
+              <button aria-label="Close unit details" onClick={() => setSelectedUnitId(null)} className="text-[#687066] hover:text-[#263229]">&times;</button>
             </div>
             <div className="p-3 space-y-2 text-xs font-mono">
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">NAME:</span>
-                <span className="col-span-2 text-slate-200">{selectedUnit.name} ({selectedUnit.callsign})</span>
+                <span className="text-[#687066]">NAME:</span>
+                <span className="col-span-2 text-[#263229]">{selectedUnit.name} ({selectedUnit.callsign})</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">TYPE:</span>
-                <span className="col-span-2 text-slate-200">{selectedUnit.type || selectedUnit.role}</span>
+                <span className="text-[#687066]">TYPE:</span>
+                <span className="col-span-2 text-[#263229]">{selectedUnit.type || selectedUnit.role}</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">FACTION:</span>
+                <span className="text-[#687066]">FACTION:</span>
                 <span className={`col-span-2 capitalize font-semibold ${
-                  selectedUnit.faction === 'friendly' ? 'text-cyan-400' :
-                  selectedUnit.faction === 'hostile' ? 'text-red-400' : 'text-amber-400'
+                  selectedUnit.faction === 'friendly' ? 'text-[#556B3F]' :
+                  selectedUnit.faction === 'hostile' ? 'text-red-400' : 'text-[#8A5C2A]'
                 }`}>{selectedUnit.faction || "Unknown"}</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">STATUS:</span>
-                <span className="col-span-2 capitalize text-slate-300">{selectedUnit.status}</span>
+                <span className="text-[#687066]">STATUS:</span>
+                <span className="col-span-2 capitalize text-[#344438]">{selectedUnit.status}</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">SECTOR:</span>
-                <span className="col-span-2 text-slate-300">
+                <span className="text-[#687066]">SECTOR:</span>
+                <span className="col-span-2 text-[#344438]">
                   {selectedUnit.sector || "Unknown"} [{Math.round(selectedUnit.x)}, {Math.round(selectedUnit.y)}]
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-1">
-                <span className="text-slate-500">COMMS:</span>
+                <span className="text-[#687066]">COMMS:</span>
                 <span className={`col-span-2 ${
-                  selectedUnit.communicationStatus === 'NORMAL' ? 'text-emerald-400' :
-                  selectedUnit.communicationStatus === 'LOST' ? 'text-red-500' : 'text-amber-400'
+                  selectedUnit.communicationStatus === 'NORMAL' ? 'text-[#556B3F]' :
+                  selectedUnit.communicationStatus === 'LOST' ? 'text-red-500' : 'text-[#8A5C2A]'
                 }`}>{selectedUnit.communicationStatus || "UNKNOWN"}</span>
               </div>
             </div>

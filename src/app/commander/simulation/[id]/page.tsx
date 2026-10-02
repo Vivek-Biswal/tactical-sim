@@ -1,13 +1,10 @@
 "use client";
 
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatusBadge, StatusVariant } from "@/components/ui/StatusBadge";
-import { TacticalMapPlaceholder } from "@/components/simulation/TacticalMapPlaceholder";
-import { SituationPanel } from "@/components/simulation/SituationPanel";
-import { CommunicationPanel } from "@/components/simulation/CommunicationPanel";
-import { DecisionPanel } from "@/components/simulation/DecisionPanel";
+import { useOfflineExercise, OfflineMap, OfflineSituation, OfflineComms, OfflineDecision } from "@/components/integration/OfflineExercise";
 import {
   ArrowLeft,
   Clock,
@@ -110,28 +107,28 @@ interface PageProps {
 
 export default function CommanderSimulationPage({ params }: PageProps) {
   const { id } = use(params);
-  const exercise = MOCK_EXERCISES[id.toLowerCase()] ?? MOCK_EXERCISES["ex-001"];
+  return <CommanderExercise key={id} id={id} />;
+}
 
-  const [elapsed, setElapsed] = useState(exercise.elapsed);
-  const [activeTab, setActiveTab] = useState<TabKey>("map");
-  const [decisionSubmitted, setDecisionSubmitted] = useState(false);
-
-  /* Tick the exercise timer */
-  useEffect(() => {
-    const t = setInterval(() => setElapsed((prev) => Math.min(prev + 1, exercise.duration)), 1000);
-    return () => clearInterval(t);
-  }, [exercise.duration]);
-
-  const remaining = exercise.duration - elapsed;
-  const progressPct = Math.min(100, (elapsed / exercise.duration) * 100);
-
-  const handleDecisionSubmit = (optionId: string) => {
-    console.log("Decision submitted:", optionId);
-    setDecisionSubmitted(true);
+function CommanderExercise({ id }: { id: string }) {
+  const { state, engine } = useOfflineExercise(id);
+  const exercise = {
+    ...(MOCK_EXERCISES[id.toLowerCase()] ?? MOCK_EXERCISES["ex-001"]),
+    id, name: state.scenarioName, scenario: "Offline demonstration",
+    status: (state.status === "running" ? "ACTIVE" : state.status === "completed" ? "ARCHIVED" : "PENDING") as StatusVariant,
+    duration: state.totalDuration,
+    phase: state.activeDecisionPoint ? "DECISION POINT" : "SITUATIONAL AWARENESS",
+    commCondition: (state.commsStatus === "normal" ? "NORMAL" : state.commsStatus === "offline" ? "OFFLINE" : "DEGRADED") as StatusVariant,
+    commLabel: state.commsStatus.toUpperCase(), participants: 1,
   };
+  const elapsed = state.elapsedSeconds;
+  const [activeTab, setActiveTab] = useState<TabKey>("map");
+  const decisionSubmitted = state.decisions.length > 0 && !state.activeDecisionPoint;
+  const remaining = Math.max(0, exercise.duration - elapsed);
+  const progressPct = state.progressPercent;
 
   return (
-    <AppShell pageTitle={`LIVE — ${exercise.id}`} role="commander">
+    <AppShell pageTitle={`OFFLINE — ${exercise.id}`} role="commander">
       {/* ─── Custom full-height layout — no extra vertical scroll ─── */}
       <div className="flex flex-col h-full -mt-8 -mx-8 overflow-hidden">
 
@@ -165,7 +162,7 @@ export default function CommanderSimulationPage({ params }: PageProps) {
             {/* Live pulse */}
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#4A7A3A] animate-pulse" />
-              <span className="text-[10px] font-black tracking-widest text-[#71805A]">LIVE</span>
+              <span className="text-[10px] font-black tracking-widest text-[#71805A]">{state.status.toUpperCase()}</span>
             </div>
 
             {/* Timer */}
@@ -212,7 +209,7 @@ export default function CommanderSimulationPage({ params }: PageProps) {
               DECISION LOGGED
             </span>
           )}
-          {!decisionSubmitted && (
+          {state.activeDecisionPoint && (
             <button
               onClick={() => setActiveTab("decision")}
               className="ml-auto flex items-center gap-1.5 text-[9px] font-black tracking-widest text-[#A94A3F] hover:text-[#7A2A20] transition-colors"
@@ -250,28 +247,25 @@ export default function CommanderSimulationPage({ params }: PageProps) {
         <div className="flex-1 overflow-hidden">
 
           {/* ─── DESKTOP: 4-panel grid ─── */}
-          <div className="hidden xl:grid xl:grid-cols-[1fr_280px_280px_340px] h-full divide-x divide-[#D9D8CE]">
+          <div className="hidden xl:grid xl:grid-cols-[minmax(360px,1fr)_220px_240px_280px] h-full divide-x divide-[#D9D8CE]">
             {/* Col 1: Tactical Map */}
             <div className="overflow-hidden p-4 bg-[#F7F5EE]">
-              <TacticalMapPlaceholder />
+              <OfflineMap state={state} engine={engine} />
             </div>
 
             {/* Col 2: Situation */}
             <div className="overflow-y-auto p-4 bg-white">
-              <SituationPanel />
+              <OfflineSituation state={state} />
             </div>
 
             {/* Col 3: Communications */}
             <div className="overflow-y-auto p-4 bg-white">
-              <CommunicationPanel />
+              <OfflineComms state={state} engine={engine} />
             </div>
 
             {/* Col 4: Decision */}
             <div className="overflow-y-auto p-4 bg-[#F7F5EE]">
-              <DecisionPanel
-                onDecisionSubmit={handleDecisionSubmit}
-                submitted={decisionSubmitted}
-              />
+              <OfflineDecision state={state} engine={engine} />
             </div>
           </div>
 
@@ -279,16 +273,13 @@ export default function CommanderSimulationPage({ params }: PageProps) {
           <div className="xl:hidden h-full overflow-y-auto p-4 bg-[#F7F5EE]">
             {activeTab === "map" && (
               <div className="h-[480px]">
-                <TacticalMapPlaceholder />
+                <OfflineMap state={state} engine={engine} />
               </div>
             )}
-            {activeTab === "situation" && <SituationPanel />}
-            {activeTab === "comms" && <CommunicationPanel />}
+            {activeTab === "situation" && <OfflineSituation state={state} />}
+            {activeTab === "comms" && <OfflineComms state={state} engine={engine} />}
             {activeTab === "decision" && (
-              <DecisionPanel
-                onDecisionSubmit={handleDecisionSubmit}
-                submitted={decisionSubmitted}
-              />
+              <OfflineDecision state={state} engine={engine} />
             )}
           </div>
         </div>

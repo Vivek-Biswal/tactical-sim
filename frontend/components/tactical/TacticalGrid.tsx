@@ -17,7 +17,7 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
           <path
             d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`}
             fill="none"
-            stroke="#1e293b"
+            stroke="#D9D8CE"
             strokeWidth="0.8"
             strokeDasharray="2,2"
           />
@@ -32,7 +32,7 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
           key={`col-${i}`}
           x={i * gridSize + 4}
           y={14}
-          fill="#475569"
+          fill="#687066"
           fontSize="9"
           fontFamily="monospace"
         >
@@ -45,7 +45,7 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
           key={`row-${j}`}
           x={4}
           y={j * gridSize + 14}
-          fill="#475569"
+          fill="#687066"
           fontSize="9"
           fontFamily="monospace"
         >
@@ -54,20 +54,20 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
       ))}
 
       {/* Sector Boundary Reference Markings */}
-      <line x1={width / 2} y1={0} x2={width / 2} y2={height} stroke="#334155" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
-      <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#334155" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
+      <line x1={width / 2} y1={0} x2={width / 2} y2={height} stroke="#71805A" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
+      <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#71805A" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
 
       {/* Sector Name Watermarks */}
-      <text x={70} y={50} fill="#334155" fontSize="12" fontWeight="bold" letterSpacing="2">
+      <text x={70} y={50} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-A [RIDGE]
       </text>
-      <text x={width - 190} y={50} fill="#334155" fontSize="12" fontWeight="bold" letterSpacing="2">
+      <text x={width - 190} y={50} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-B [HIGHWAY]
       </text>
-      <text x={70} y={height - 25} fill="#334155" fontSize="12" fontWeight="bold" letterSpacing="2">
+      <text x={70} y={height - 25} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-C [RALLY]
       </text>
-      <text x={width - 190} y={height - 25} fill="#334155" fontSize="12" fontWeight="bold" letterSpacing="2">
+      <text x={width - 190} y={height - 25} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-D [CANYON]
       </text>
     </g>

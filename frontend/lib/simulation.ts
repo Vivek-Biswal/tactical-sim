@@ -3,7 +3,7 @@ import { Scenario, ScenarioEvent } from "../types/scenario";
 import { RadioMessage, MessageSenderRole, MessageType, DeliveryStatus } from "../types/communication";
 import { DecisionRecord, DecisionPoint } from "../types/decision";
 import { getDemoScenario } from "../data/demoScenario";
-import { formatSimTime } from "./utils";
+const formatSimTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
 export class LocalSimulationEngine {
   private state: ExerciseState;
@@ -12,6 +12,7 @@ export class LocalSimulationEngine {
   private listeners: Set<(state: ExerciseState) => void> = new Set();
   private triggeredEventIds: Set<string> = new Set();
   private startTimestamp: number = Date.now();
+  private lastMapUpdateSecond = 0;
 
   constructor(exerciseId: string = "exercise-demo-1", isDemo: boolean = true) {
     this.scenario = getDemoScenario(isDemo);
@@ -97,7 +98,7 @@ export class LocalSimulationEngine {
   }
 
   public start() {
-    if (this.state.status === "running") return;
+    if (this.state.status === "running" || this.state.status === "completed") return;
     this.state.status = "running";
     this.logEvent("Exercise Started", `Simulation commenced (${this.state.isDemo ? "Fast Demo 2m" : "Standard 10m"})`, "system");
     this.notify();
@@ -144,6 +145,7 @@ export class LocalSimulationEngine {
     const demo = isDemo !== undefined ? isDemo : this.state.isDemo;
     this.scenario = getDemoScenario(demo);
     this.triggeredEventIds.clear();
+    this.lastMapUpdateSecond = 0;
     this.startTimestamp = Date.now();
     this.state = this.createInitialState(this.state.exerciseId, demo);
     this.notify();
@@ -175,16 +177,6 @@ export class LocalSimulationEngine {
 
     // Units only move via explicit scenario events now.
     
-    // Mirror to display units unless map is outdated
-    if (this.state.mapStatus === "current" && this.state.trueUnits) {
-      this.state.units = JSON.parse(JSON.stringify(this.state.trueUnits));
-      this.state.mapLastUpdated = "Live Telemetry Active";
-    } else {
-      const staleMins = Math.floor(this.state.elapsedSeconds / 60);
-      const staleSecs = Math.floor(this.state.elapsedSeconds % 60);
-      this.state.mapLastUpdated = `Last updated: ${staleMins}m ${staleSecs}s ago (STALE)`;
-    }
-
     // Process pending messages (Phase 4)
     const remainingPending: RadioMessage[] = [];
     for (const msg of this.state.pendingMessages) {
@@ -216,6 +208,8 @@ export class LocalSimulationEngine {
       }
     }
 
+    this.refreshMap();
+
     // Check completion
     if (this.state.elapsedSeconds >= this.state.totalDuration) {
       this.end();
@@ -224,8 +218,26 @@ export class LocalSimulationEngine {
     this.notify();
   }
 
+  private refreshMap() {
+    if (this.state.mapStatus === "current") {
+      this.state.units = JSON.parse(JSON.stringify(this.state.trueUnits));
+      this.lastMapUpdateSecond = this.state.elapsedSeconds;
+      this.state.mapLastUpdated = `Updated at ${this.state.formattedTime}`;
+    } else if (this.state.mapStatus === "unavailable") {
+      this.state.mapLastUpdated = "Telemetry unavailable";
+    } else {
+      this.state.mapLastUpdated = `Last update ${formatSimTime(this.lastMapUpdateSecond)} · ${Math.floor(this.state.elapsedSeconds - this.lastMapUpdateSecond)}s old`;
+    }
+  }
+
+  public dispose() {
+    if (this.timerId) clearInterval(this.timerId);
+    this.timerId = null;
+  }
+
   private triggerScenarioEvent(evt: ScenarioEvent) {
     const payload = evt.payload;
+    if (payload.mapStatus) this.state.mapStatus = payload.mapStatus;
     this.logEvent(evt.title, evt.description, evt.type, payload);
 
     if (payload.availableInfo) {
@@ -276,7 +288,7 @@ export class LocalSimulationEngine {
     } else if (evt.type === "map_status") {
       if (payload.mapStatus) {
         this.state.mapStatus = payload.mapStatus as any;
-        this.state.mapLastUpdated = "Last updated: 3 minutes ago (STALE)";
+        this.refreshMap();
       }
     } else if (evt.type === "decision_point") {
       this.state.activeDecisionPoint = {
@@ -427,6 +439,7 @@ export class LocalSimulationEngine {
       this.processDecisionConsequence(selectedAction.consequence);
     }
     
+    this.refreshMap();
     this.logEvent("Commander Decision Submitted", `Action: ${actionLabel}`, "decision", {
       actionId,
       actionLabel,
@@ -491,8 +504,11 @@ export class LocalSimulationEngine {
        this.logEvent("Instructor Inject: Conflicting SITREPs", "Dispatched contradictory intelligence feeds", "instructor");
     } else if (action === "outdate_map") {
       this.state.mapStatus = "outdated";
-      this.state.mapLastUpdated = "Last updated: 3 minutes ago (STALE)";
+      this.refreshMap();
       this.logEvent("Instructor Inject: Outdate Map", "Tactical map GPS telemetry frozen", "instructor");
+    } else if (action === "unavailable_map") {
+      this.state.mapStatus = "unavailable";
+      this.logEvent("Map Unavailable", "Map feed denied", "map_status", { mapStatus: "unavailable" });
     } else if (action === "restore_map") {
       this.state.mapStatus = "current";
       this.state.mapLastUpdated = "Live Telemetry Active";
@@ -507,20 +523,22 @@ export class LocalSimulationEngine {
       );
       this.logEvent("Instructor Inject: Intel Report", `Source: ${payload?.source}`, "instructor");
     } else if (action === "move_unit") {
-      const unit = this.state.units.find(u => u.id === payload?.targetUnitId);
+      const unit = this.state.trueUnits?.find(u => u.id === payload?.targetUnitId);
       if (unit) {
+        if (typeof payload?.x === "number") unit.x = payload.x;
+        if (typeof payload?.y === "number") unit.y = payload.y;
         unit.sector = payload?.sector as string || unit.sector;
         this.logEvent("Instructor Inject: Move Unit", `Moved ${unit.name} to ${unit.sector}`, "instructor");
       }
     } else if (action === "change_status") {
-      const unit = this.state.units.find(u => u.id === payload?.targetUnitId);
+      const unit = this.state.trueUnits?.find(u => u.id === payload?.targetUnitId);
       if (unit) {
         unit.status = payload?.status as any || unit.status;
         this.logEvent("Instructor Inject: Change Status", `Status of ${unit.name} set to ${unit.status}`, "instructor");
       }
     } else if (action === "detect_contact" || action === "activate_contact") {
       const contactId = payload?.targetContactId as string;
-      const contact = this.state.units.find(u => u.id === contactId);
+      const contact = this.state.trueUnits?.find(u => u.id === contactId);
       if (contact) {
         contact.sector = payload?.sector as string || contact.sector;
         contact.faction = action === "activate_contact" ? "hostile" : "unknown";
@@ -543,6 +561,7 @@ export class LocalSimulationEngine {
       };
       this.logEvent("Instructor Inject: Decision Point", `Forced decision point: ${payload?.title}`, "instructor");
     }
+    this.refreshMap();
     this.notify();
   }
 
@@ -604,6 +623,7 @@ let globalSimulationEngine: LocalSimulationEngine | null = null;
 
 export function getSimulationEngine(exerciseId: string = "exercise-demo-1", isDemo: boolean = true): LocalSimulationEngine {
   if (!globalSimulationEngine || globalSimulationEngine.getState().exerciseId !== exerciseId) {
+    globalSimulationEngine?.dispose();
     globalSimulationEngine = new LocalSimulationEngine(exerciseId, isDemo);
   }
   return globalSimulationEngine;
