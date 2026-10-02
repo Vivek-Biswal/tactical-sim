@@ -31,3 +31,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local deployment metadata and design references
+.vercel/
+.design-reference/

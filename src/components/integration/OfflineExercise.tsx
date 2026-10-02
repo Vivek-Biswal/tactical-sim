@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LocalSimulationEngine } from "../../../frontend/lib/simulation";
-import { ExerciseState } from "../../../frontend/types/exercise";
-import { TacticalMap } from "../../../frontend/components/tactical/TacticalMap";
+import { LocalSimulationEngine } from "@/simulation/lib/simulation";
+import { ExerciseState } from "@/simulation/types/exercise";
+import { TacticalMap } from "@/simulation/components/tactical/TacticalMap";
 import { PanelCard } from "@/components/ui/PanelCard";
 
 export function useOfflineExercise(id: string) {

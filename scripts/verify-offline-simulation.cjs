@@ -6,7 +6,7 @@ require.extensions['.ts'] = (module, filename) => {
   const compiled = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } });
   module._compile(compiled.outputText, filename);
 };
-const { LocalSimulationEngine } = require('../frontend/lib/simulation.ts');
+const { LocalSimulationEngine } = require('../src/simulation/lib/simulation.ts');
 const engine = new LocalSimulationEngine('test');
 try {
   engine.start(); engine.dispose();

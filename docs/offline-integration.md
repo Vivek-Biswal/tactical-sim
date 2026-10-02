@@ -26,3 +26,11 @@ The map uses Chakravyuh colors, keyboard-selectable units, zoom controls, a coll
 ## Remaining platform scope
 
 This integration is a single Commander session in browser memory. Reloading or leaving the route resets it. It does not implement synchronized multiplayer or connect the root instructor/team screens to this session. Those screens and the root AAR page retain their existing data; use Export AAR on the integrated screen for the actual session report. The separate backend/WebSocket and richer AAR UI remain available for a future shared-session integration. Exported AAR JSON includes decisions, rationale, communication evidence and the event timeline; no training-effectiveness scoring has been validated.
+
+## Frontend replacement (October 3, 2026)
+
+The user's ZIP supplied five screenshots matching Kakul's root TACTICAL-SIM application; the separately attached dark COMMAND-X screenshot identified the application to remove. The duplicate `frontend/` application has been deleted. Its reusable tactical components, engine, scenario and types were migrated to `src/simulation/`; the Commander adapter and regression script now import them there. Root pages, authentication and shared design components remain the visual source. The login elevation decoration was moved away from the paragraph highlighted in the reference.
+
+Vercel must build from the repository root. The connected Vercel account returned only a different project, so the `tactical-sim.vercel.app` project setting and deployment could not be inspected or changed with that connection. The replacement is local and ready for a root-app deployment.
+
+The replacement passed production build/TypeScript, tactical-component lint and the migrated engine regression test. Browser verification passed the landing page, Start Training role modal, Commander navigation, exercise start/pause, map zoom and keyboard unit selection. A desktop landing-page preview was captured; the default smaller viewport also rendered the responsive landing page.

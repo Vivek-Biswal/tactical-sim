@@ -49,7 +49,7 @@ const TopoLeft = () => (
     <div className="absolute bottom-[8%] right-[4%] text-[10px] font-mono font-bold tracking-widest text-[#71805A] opacity-60">
       GRID 24A-TANGO
     </div>
-    <div className="absolute top-[50%] left-[4%] text-[10px] font-mono font-bold tracking-widest text-[#71805A] opacity-60">
+    <div className="absolute top-24 right-8 text-[10px] font-mono font-bold tracking-widest text-[#71805A] opacity-60">
       ELEV 3,240M
     </div>
 
