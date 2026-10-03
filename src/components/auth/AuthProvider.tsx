@@ -1,11 +1,14 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import {
   User,
   onAuthStateChanged,
   signOut,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import { resolveAuthError } from "@/lib/auth";
@@ -53,6 +56,9 @@ interface AuthContextType {
   role: string | null;
   setRole: (role: string | null) => void;
   loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -63,35 +69,39 @@ const AuthContext = createContext<AuthContextType>({
   role: null,
   setRole: () => {},
   loginWithGoogle: async () => {},
+  loginWithEmail: async () => {},
+  registerWithEmail: async () => {},
+  resetPassword: async () => {},
   logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
+function readRole(): string | null {
+  try { return localStorage.getItem("tactical_sim_role"); }
+  catch { return null; }
+}
+
+function subscribeRole(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("tactical-role-change", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("tactical-role-change", onChange);
+  };
+}
+
 /* ── Provider ── */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [role, setRoleState] = useState<string | null>(null);
-
-  // Load role from localStorage on mount (persists demo sessions too)
-  useEffect(() => {
-    try {
-      const storedRole = localStorage.getItem("tactical_sim_role");
-      if (storedRole) setRoleState(storedRole);
-    } catch {
-      console.warn("[TACTICAL-SIM] Failed to read role from localStorage.");
-    }
-  }, []);
+  const [loading, setLoading] = useState(!!auth);
+  const role = useSyncExternalStore(subscribeRole, readRole, () => null);
 
   const setRole = (newRole: string | null) => {
-    setRoleState(newRole);
     try {
-      if (newRole) {
-        localStorage.setItem("tactical_sim_role", newRole);
-      } else {
-        localStorage.removeItem("tactical_sim_role");
-      }
+      if (newRole) localStorage.setItem("tactical_sim_role", newRole);
+      else localStorage.removeItem("tactical_sim_role");
+      window.dispatchEvent(new Event("tactical-role-change"));
     } catch {
       console.warn("[TACTICAL-SIM] Failed to persist role to localStorage.");
     }
@@ -101,7 +111,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!auth) {
       // Firebase not configured – skip auth check, allow demo flow
-      setLoading(false);
       return;
     }
 
@@ -132,6 +141,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const emailAction = async (action: "login" | "register" | "reset", email: string, password = "") => {
+    if (!auth) throw new Error("Firebase is not configured.");
+    try {
+      if (action === "login") await signInWithEmailAndPassword(auth, email.trim(), password);
+      else if (action === "register") await createUserWithEmailAndPassword(auth, email.trim(), password);
+      else await sendPasswordResetEmail(auth, email.trim());
+    } catch (err) {
+      throw new Error(resolveAuthError(err));
+    }
+  };
+
   /* ── Sign-out ── */
   const logout = async (): Promise<void> => {
     if (auth) {
@@ -149,6 +169,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
         setRole,
         loginWithGoogle,
+        loginWithEmail: (email, password) => emailAction("login", email, password),
+        registerWithEmail: (email, password) => emailAction("register", email, password),
+        resetPassword: (email) => emailAction("reset", email),
         logout,
       }}
     >

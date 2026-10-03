@@ -46,15 +46,13 @@ export function AppShell({ children, pageTitle, role }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const { user, loading, isFirebaseConfigured, role: sessionRole } = useAuth();
+  const { user, loading, isFirebaseConfigured } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Auth guard: redirect to login ONLY when Firebase is configured, the user is
-  // not authenticated via Google/Firebase AND has no demo session role.
-  // This preserves the demo flow (name + role selection) alongside real Firebase auth.
+  // Firebase sessions are required when authentication is configured.
   React.useEffect(() => {
-    if (!loading && isFirebaseConfigured && !user && !sessionRole) {
+    if (!loading && isFirebaseConfigured && !user) {
       // Preserve the intended destination so login can redirect back after auth
       try {
         sessionStorage.setItem("tactical_sim_redirect", pathname ?? "/training");
@@ -63,10 +61,10 @@ export function AppShell({ children, pageTitle, role }: AppShellProps) {
       }
       router.push("/login");
     }
-  }, [user, loading, isFirebaseConfigured, sessionRole, router, pathname]);
+  }, [user, loading, isFirebaseConfigured, router, pathname]);
 
   // Show loading state while Firebase checks auth – avoids a flash of protected content
-  if (isFirebaseConfigured && loading && !sessionRole) {
+  if (isFirebaseConfigured && loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F7F5EE]">
         <div className="flex flex-col items-center gap-3">
@@ -76,6 +74,8 @@ export function AppShell({ children, pageTitle, role }: AppShellProps) {
       </div>
     );
   }
+
+  if (isFirebaseConfigured && !user) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F7F5EE]">

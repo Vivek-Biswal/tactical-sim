@@ -25,7 +25,8 @@ const firebaseConfig = {
  * When false the application runs in demo mode (no Firebase).
  */
 export const isFirebaseConfigured =
-  !!firebaseConfig.apiKey && !!firebaseConfig.projectId;
+  !!firebaseConfig.apiKey && !!firebaseConfig.projectId &&
+  !!firebaseConfig.authDomain && !!firebaseConfig.appId;
 
 // Log a developer-facing warning when credentials are missing so the cause is
 // immediately obvious rather than surfacing as an obscure undefined error later.

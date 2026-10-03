@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Terminal, Map as MapIcon, Radio, ChevronRight, Target, Activity, LogIn } from "lucide-react";
+import { Shield, Terminal, Map as MapIcon, Radio, ChevronRight, Target, Activity } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 
@@ -104,8 +104,12 @@ const roles: Record<RoleKey, RoleConfig> = {
 export default function LoginPage() {
   const router = useRouter();
   const { addToast } = useToast();
-  const { user, loginWithGoogle, isFirebaseConfigured, setRole, role: globalRole, loading } = useAuth();
+  const { user, loginWithGoogle, loginWithEmail, registerWithEmail, resetPassword, isFirebaseConfigured, setRole, role: globalRole, loading } = useAuth();
   
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
+  const [notice, setNotice] = useState("");
   const [name, setName] = useState("");
   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
   const [error, setError] = useState("");
@@ -116,7 +120,7 @@ export default function LoginPage() {
     try {
       const dest = sessionStorage.getItem("tactical_sim_redirect");
       if (dest) sessionStorage.removeItem("tactical_sim_redirect");
-      return dest;
+      return dest?.startsWith("/") && !dest.startsWith("//") && !dest.includes("\\") && !dest.startsWith("/login") ? dest : null;
     } catch {
       return null;
     }
@@ -124,7 +128,7 @@ export default function LoginPage() {
 
   // Auto-redirect if already logged in
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !isLoggingIn) {
       const savedDest = consumeRedirectDestination();
       if (savedDest) {
         router.push(savedDest);
@@ -134,7 +138,7 @@ export default function LoginPage() {
         router.push('/dashboard');
       }
     }
-  }, [user, loading, globalRole, router]);
+  }, [user, loading, globalRole, router, isLoggingIn]);
 
   const handleDemoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +158,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!selectedRole) {
-      setError("Please select your operational role first.");
+      setError("Please select your training role first.");
       return;
     }
     setError("");
@@ -167,7 +171,8 @@ export default function LoginPage() {
         title: "Authentication Successful",
         message: "Welcome to TACTICAL-SIM.",
       });
-      // the useEffect will handle the redirect once `user` is set
+      setIsLoggingIn(false);
+      // The auth-state listener and role are ready before redirecting.
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -182,6 +187,39 @@ export default function LoginPage() {
         message,
       });
     }
+  };
+
+  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (mode !== "reset" && !selectedRole) {
+      setError("Please select your training role first.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    setIsLoggingIn(true);
+    try {
+      if (mode === "reset") {
+        await resetPassword(email);
+        setNotice("If an account exists for this email, you will receive a password reset link.");
+      } else {
+        if (mode === "register") await registerWithEmail(email, password);
+        else await loginWithEmail(email, password);
+        setRole(selectedRole);
+        setPassword("");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in. Please try again.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const changeMode = (next: "login" | "register" | "reset") => {
+    setMode(next);
+    setPassword("");
+    setError("");
+    setNotice("");
   };
 
   return (
@@ -292,7 +330,7 @@ export default function LoginPage() {
               <div className="text-[10px] font-bold tracking-[0.2em] text-[#B69B63] uppercase mb-1">
                 Secure Training Access
               </div>
-              <h2 className="text-3xl font-black text-[#263229] mb-2 tracking-tight">Welcome Back</h2>
+              <h2 className="text-3xl font-black text-[#263229] mb-2 tracking-tight">{mode === "register" ? "Create Your Account" : mode === "reset" ? "Reset Password" : "Welcome Back"}</h2>
               <p className="text-[#687066] text-sm font-medium mb-8 leading-relaxed">
                 Enter the training environment to continue your exercise.
               </p>
@@ -302,7 +340,7 @@ export default function LoginPage() {
                 {/* Role selector (used for both flows) */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black tracking-[0.15em] text-[#344438] uppercase">
-                    Operational Role
+                    Training Role
                   </label>
                   <div className="flex flex-col gap-2">
                     {(Object.entries(roles) as [RoleKey, RoleConfig][]).map(([key, role]) => {
@@ -312,6 +350,8 @@ export default function LoginPage() {
                         <button
                           type="button"
                           key={key}
+                          aria-pressed={isSelected}
+                          disabled={isLoggingIn}
                           onClick={() => {
                             setSelectedRole(key);
                             setError("");
@@ -356,7 +396,7 @@ export default function LoginPage() {
 
                 {/* Validation error */}
                 {error && (
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-[#A94A3F]/[0.08] border border-[#A94A3F]/30 rounded text-[#A94A3F] text-xs font-bold">
+                  <div role="alert" className="flex items-center gap-2 px-3 py-2.5 bg-[#A94A3F]/[0.08] border border-[#A94A3F]/30 rounded text-[#A94A3F] text-xs font-bold">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#A94A3F] flex-shrink-0" />
                     {error}
                   </div>
@@ -364,11 +404,10 @@ export default function LoginPage() {
 
                 {/* Authentication Controls */}
                 <div className="mt-2 space-y-4">
-                  {isFirebaseConfigured ? (
-                    <button
+                  <button
                       type="button"
                       onClick={handleGoogleLogin}
-                      disabled={isLoggingIn}
+                      disabled={isLoggingIn || loading || !isFirebaseConfigured}
                       className="w-full flex items-center justify-center gap-3 bg-white border border-[#D9D8CE] hover:bg-[#F7F5EE] active:bg-[#EFE8D8] text-[#263229] py-3.5 rounded-lg font-black text-sm tracking-widest transition-all shadow-sm disabled:opacity-60 disabled:cursor-wait"
                     >
                       {isLoggingIn ? (
@@ -389,7 +428,7 @@ export default function LoginPage() {
                         </>
                       )}
                     </button>
-                  ) : (
+                  {!isFirebaseConfigured && (
                     <div className="text-center p-3 bg-[#FFF9E6] border border-[#F0D57D] rounded-lg">
                       <p className="text-[11px] font-bold text-[#8A5C2A] uppercase tracking-wider">
                         Firebase authentication is not configured. Using demo flow.
@@ -397,11 +436,32 @@ export default function LoginPage() {
                     </div>
                   )}
 
+                  <>
+                      <div className="flex items-center gap-3 text-[10px] font-bold tracking-widest text-[#71805A]"><span className="h-px flex-1 bg-[#D9D8CE]" />OR USE EMAIL<span className="h-px flex-1 bg-[#D9D8CE]" /></div>
+                      <form onSubmit={handleEmailSubmit} className="space-y-4">
+                        <div>
+                          <label htmlFor="login-email" className="block mb-2 text-[10px] font-black tracking-widest text-[#344438]">EMAIL ADDRESS</label>
+                          <input id="login-email" type="email" autoComplete="email" required maxLength={254} value={email} disabled={isLoggingIn} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full px-4 py-3 rounded-lg border border-[#D9D8CE] bg-[#F7F5EE] text-[#263229] text-sm focus:outline-none focus:ring-2 focus:ring-[#556B3F]/30" />
+                        </div>
+                        {mode !== "reset" && <div>
+                          <label htmlFor="login-password" className="block mb-2 text-[10px] font-black tracking-widest text-[#344438]">PASSWORD</label>
+                          <input id="login-password" type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} required minLength={mode === "register" ? 6 : 1} value={password} disabled={isLoggingIn} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 rounded-lg border border-[#D9D8CE] bg-[#F7F5EE] text-[#263229] text-sm focus:outline-none focus:ring-2 focus:ring-[#556B3F]/30" />
+                          {mode === "register" && <p className="mt-2 text-xs text-[#687066]">Use at least 6 characters. Your project may require a stronger password.</p>}
+                        </div>}
+                        {notice && <p role="status" className="p-3 rounded-lg bg-[#556B3F]/10 text-sm text-[#344438]">{notice}</p>}
+                        <button type="submit" disabled={isLoggingIn || loading || !isFirebaseConfigured} className="w-full bg-[#556B3F] hover:bg-[#344438] text-white py-3.5 rounded-lg font-black text-sm tracking-widest disabled:opacity-60 disabled:cursor-wait">{isLoggingIn ? "PLEASE WAIT…" : mode === "register" ? "CREATE ACCOUNT" : mode === "reset" ? "SEND RESET LINK" : "SIGN IN WITH EMAIL"}</button>
+                      </form>
+                      <div className="flex flex-wrap justify-between gap-3 text-xs font-bold text-[#556B3F]">
+                        <button type="button" disabled={isLoggingIn} onClick={() => changeMode(mode === "login" ? "register" : "login")} className="hover:underline">{mode === "login" ? "New here? Create an account" : "Back to sign in"}</button>
+                        {mode === "login" && <button type="button" disabled={isLoggingIn} onClick={() => changeMode("reset")} className="hover:underline">Forgot password?</button>}
+                      </div>
+                  </>
+
                   {/* Fallback Demo Flow */}
-                  <form onSubmit={handleDemoSubmit} className="flex flex-col gap-4 mt-4 pt-4 border-t border-[#D9D8CE]">
+                  {!isFirebaseConfigured && <form onSubmit={handleDemoSubmit} className="flex flex-col gap-4 mt-4 pt-4 border-t border-[#D9D8CE]">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[10px] font-black tracking-[0.15em] text-[#344438] uppercase">
-                        Demo Access Name (Optional if Google login used)
+                        Demo Access Name
                       </label>
                       <input
                         type="text"
@@ -422,7 +482,7 @@ export default function LoginPage() {
                       ENTER DEMO TRAINING
                       <ChevronRight className="w-4 h-4" />
                     </button>
-                  </form>
+                  </form>}
                 </div>
 
                 {/* System status */}
