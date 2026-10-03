@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type RoleKey = "instructor" | "commander" | "team" | "admin";
 
@@ -45,20 +45,27 @@ const ContentBackground = () => (
 export function AppShell({ children, pageTitle, role }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   const { user, loading, isFirebaseConfigured, role: sessionRole } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   // Auth guard: redirect to login ONLY when Firebase is configured, the user is
   // not authenticated via Google/Firebase AND has no demo session role.
   // This preserves the demo flow (name + role selection) alongside real Firebase auth.
   React.useEffect(() => {
     if (!loading && isFirebaseConfigured && !user && !sessionRole) {
-      router.push("/");
+      // Preserve the intended destination so login can redirect back after auth
+      try {
+        sessionStorage.setItem("tactical_sim_redirect", pathname ?? "/training");
+      } catch {
+        // sessionStorage unavailable (private browsing, iframe) – ignore
+      }
+      router.push("/login");
     }
-  }, [user, loading, isFirebaseConfigured, sessionRole, router]);
+  }, [user, loading, isFirebaseConfigured, sessionRole, router, pathname]);
 
-  // If loading and we need auth, maybe show a blank or skeleton, but for now just render
+  // Show loading state while Firebase checks auth – avoids a flash of protected content
   if (isFirebaseConfigured && loading && !sessionRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F7F5EE]">
