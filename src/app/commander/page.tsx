@@ -349,7 +349,7 @@ export default function CommanderPage() {
                 </PanelCard>
               </Link>
 
-              <Link href="/aar/EX-001" className="group">
+              <Link href="/commander/simulation/EX-001/review" className="group">
                 <PanelCard className="flex items-center gap-4 hover:border-[#71805A] hover:bg-[#F7F5EE] transition-colors cursor-pointer p-4">
                   <div className="w-10 h-10 rounded-full bg-[#EFE8D8] border border-[#D8C7A5] flex items-center justify-center flex-shrink-0 group-hover:bg-[#71805A] group-hover:text-white transition-colors text-[#344438]">
                     <FileText size={18} />

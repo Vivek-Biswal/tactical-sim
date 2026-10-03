@@ -26,6 +26,7 @@ export interface TacticalMapProps {
   movementEnabled?: boolean;
   className?: string;
   trainingArea?: TrainingArea;
+  compact?: boolean;
 }
 const statusStyles: Record<MapStatus,string> = {
   current:"border-[#C4DAC0] bg-[#EEF3E8] text-[#3A6B30]",
@@ -34,7 +35,7 @@ const statusStyles: Record<MapStatus,string> = {
 };
 const control = "rounded border border-[#D9D8CE] bg-white p-2 text-[#344438] hover:bg-[#EEF3E8] focus-visible:outline-2 focus-visible:outline-[#556B3F] disabled:opacity-40";
 
-export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStatus="current",mapLastUpdated="No update timestamp supplied",onUnitSelect,onUnitMove,movementEnabled=false,className=""}:TacticalMapProps) {
+export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStatus="current",mapLastUpdated="No update timestamp supplied",onUnitSelect,onUnitMove,movementEnabled=false,className="",compact=false}:TacticalMapProps) {
   const [selection,setSelection]=useState<{type:"unit"|"activity";id:string}|null>(null);
   const [zoom,setZoom]=useState(1);
   const [center,setCenter]=useState<Point>({x:400,y:300});
@@ -164,7 +165,7 @@ export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStat
       </form>}
       {feedback && <p role="status" className="mt-2 text-[10px] text-[#687066]">{feedback}</p>}
     </div>}
-    {preset && <p className="border-t border-[#D9D8CE] px-3 py-2 text-[10px] leading-relaxed text-[#687066]">{preset.description} This simplified drawing and its training routes are fictional; switch to 3D to explore the real landscape.</p>}
+    {preset && !compact && <p className="border-t border-[#D9D8CE] px-3 py-2 text-[10px] leading-relaxed text-[#687066]">{preset.description} This simplified drawing and its training routes are fictional; switch to 3D to explore the real landscape.</p>}
     <MapLegend/>
   </section>;
 }

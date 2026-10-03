@@ -12,6 +12,7 @@ interface AppShellProps {
   children: React.ReactNode;
   pageTitle: string;
   role?: RoleKey;
+  workspace?: boolean;
 }
 
 /* Subtle tactical grid for the main content area */
@@ -42,8 +43,8 @@ const ContentBackground = () => (
   </div>
 );
 
-export function AppShell({ children, pageTitle, role }: AppShellProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+export function AppShell({ children, pageTitle, role, workspace = false }: AppShellProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(workspace);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { user, loading, isFirebaseConfigured } = useAuth();
@@ -111,9 +112,9 @@ export function AppShell({ children, pageTitle, role }: AppShellProps) {
         />
 
         {/* Content */}
-        <main className="relative flex-1 overflow-y-auto">
+        <main className={`relative min-h-0 flex-1 ${workspace ? "overflow-hidden" : "overflow-y-auto"}`}>
           <ContentBackground />
-          <div className="relative z-10 p-4 md:p-8">
+          <div className={`relative z-10 ${workspace ? "flex h-full min-h-0 flex-col" : "p-4 md:p-8"}`}>
             {children}
           </div>
         </main>

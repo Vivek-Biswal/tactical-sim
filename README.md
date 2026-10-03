@@ -97,6 +97,8 @@ Also set:
 
 ## Verification
 
+Exercise workspaces use [separate pages with a persistent session](docs/exercise-pages.md). Open Setup to choose a location, Tactical map to navigate, Communications to transmit, and Review & export for the recorded AAR.
+
 See the [Varun backend completion checklist](docs/varun-backend-completion.md) and [HTTP/WebSocket API contracts](docs/backend-api.md) for implementation evidence and verified integration behavior.
 
 ```powershell
