@@ -1,500 +1,681 @@
-import asyncio
+"""Authoritative in-memory room simulation. All writes run on the ASGI event loop."""
+
+import math
+import secrets
 import time
 import uuid
-from typing import Dict, List, Optional, Any
-from app.schemas.models import (
-    Scenario, ScenarioEvent, Message, Decision, InformationState, AARSummary
-)
-from app.scenario_engine.events import get_operation_silent_link
+from copy import deepcopy
+
+from app.config import settings
+from app.scenario_engine.events import TITLES, get_operation_silent_link
+from app.schemas.models import EventPayload, MovementInput
+
+INJECT_TYPES = {
+    "delay_radio": "RADIO_DELAY",
+    "drop_radio": "RADIO_DROPOUT",
+    "restore_radio": "RADIO_RESTORED",
+    "conflicting_report": "CONFLICTING_REPORT",
+    "outdate_map": "MAP_OUTDATED",
+    "unavailable_map": "MAP_UNAVAILABLE",
+    "restore_map": "MAP_RESTORED",
+    "new_intelligence": "NEW_INTELLIGENCE",
+    "decision_required": "DECISION_REQUIRED",
+}
+
+
+def uid():
+    return uuid.uuid4().hex
+
+
+def clock(second):
+    return f"{int(second) // 60:02d}:{int(second) % 60:02d}"
+
 
 class ExerciseSession:
-    def __init__(self, exercise_id: str, scenario: Scenario, team_name: str = "Task Force Alpha", is_demo: bool = True):
+    def __init__(
+        self,
+        exercise_id,
+        scenario=None,
+        team_name="Task Force Alpha",
+        is_demo=True,
+        instructor_key=None,
+    ):
         self.exercise_id = exercise_id
-        self.scenario = scenario
-        self.team_name = team_name
-        self.is_demo = is_demo
-        self.speed_multiplier = 1.0
-        
-        self.status = "pending"  # "pending", "running", "paused", "completed"
-        self.start_timestamp = time.time()
-        self.elapsed_seconds = 0
-        self.total_duration = scenario.durationSeconds
-        
-        # Operational Degradation States
-        self.comms_status: str = "normal"  # "normal", "delayed", "offline"
-        self.radio_delay_seconds: int = 0
-        self.map_status: str = "current"    # "current", "outdated", "unavailable"
-        self.map_last_updated_str: str = "Live Telemetry Active"
-        self.map_stale_seconds: int = 0
-        
-        # Tactical Map State
-        self.units = [dict(u) for u in scenario.initialUnits]
-        self.reported_units = [dict(u) for u in scenario.initialUnits]  # Stale COP snapshot
-        self.activity_markers: List[Dict[str, Any]] = [
+        self.scenario = scenario or get_operation_silent_link(is_demo)
+        self.team_name, self.is_demo = team_name, is_demo
+        self.instructor_key = instructor_key or secrets.token_urlsafe(32)
+        self.created_at = time.time()
+        self.started_at = self.completed_at = None
+        self.last_wall = time.monotonic()
+        self.speed_multiplier, self.elapsed_seconds = 1.0, 0.0
+        self.total_duration = self.scenario["durationSeconds"]
+        self.status, self.comms_status, self.map_status = "pending", "normal", "current"
+        self.radio_delay_seconds, self.map_snapshot_second = 0, 0
+        self.units = deepcopy(self.scenario["initialUnits"])
+        self.activities = [
             {
-                "id": "act-1",
-                "label": "Sector 3 Checkpoint",
+                "id": "checkpoint",
+                "label": "Sector 3 checkpoint",
                 "x": 380,
                 "y": 280,
                 "type": "checkpoint",
-                "status": "active"
+                "status": "active",
             }
         ]
-        
-        # Information State snapshot
-        self.available_information: List[str] = [
-            "Satellite GPS Track (Normal)",
-            "Direct VHF Radio Uplink (Clear)",
-            "Pre-mission Area Reconnaissance"
+        self.reported_units, self.reported_activities = (
+            deepcopy(self.units),
+            deepcopy(self.activities),
+        )
+        self.messages, self.decisions, self.event_log, self.reports = [], [], [], []
+        self.pending_messages, self.movements = {}, {}
+        self.triggered_event_ids = set()
+        self.active_decision = None
+        self.broadcast_cursor, self.revision = 0, 0
+
+    def require_running(self):
+        if self.status != "running":
+            raise ValueError("Exercise must be running")
+
+    def require_capacity(self):
+        if (
+            len(self.event_log) >= 5000
+            or len(self.messages) >= 1000
+            or len(self.decisions) >= 200
+        ):
+            raise ValueError("Room record limit reached; end and export this exercise")
+
+    def information(self):
+        available = ["Pre-exercise briefing", *[r["content"] for r in self.reports]]
+        unavailable = []
+        if self.comms_status == "normal":
+            available.append("Two-way radio available")
+        elif self.comms_status == "delayed":
+            available.append(f"Radio delayed by {self.radio_delay_seconds:g}s")
+        else:
+            unavailable.append("Two-way radio unavailable")
+        if self.map_status == "current":
+            available.append("Current team telemetry")
+        elif self.map_status == "outdated":
+            available.append(
+                f"Last known map snapshot at {clock(self.map_snapshot_second)}"
+            )
+            unavailable.append("Current team positions")
+        else:
+            unavailable.append("Map feed and team positions")
+        return available, unavailable
+
+    def log_event(self, kind, description=None, payload=None, source="system"):
+        self.revision += 1
+        self.event_log.append(
+            {
+                "id": uid(),
+                "type": kind,
+                "timestamp": self.elapsed_seconds,
+                "second": self.elapsed_seconds,
+                "time": clock(self.elapsed_seconds),
+                "title": TITLES.get(kind, kind.replace("_", " ").title()),
+                "description": description or TITLES.get(kind, kind),
+                "category": kind,
+                "payload": deepcopy(payload or {}),
+                "source": source,
+            }
+        )
+
+    def sync_map(self):
+        if self.map_status == "current":
+            self.reported_units, self.reported_activities = (
+                deepcopy(self.units),
+                deepcopy(self.activities),
+            )
+            self.map_snapshot_second = self.elapsed_seconds
+
+    def get_state(self, instructor=False):
+        available, unavailable = self.information()
+        visible_log = [
+            e
+            for e in self.event_log
+            if instructor
+            or (
+                e["type"] not in ("TEAM_MOVEMENT", "TEAM_ARRIVED")
+                or self.map_status == "current"
+            )
         ]
-        self.unavailable_information: List[str] = []
-        
-        # Logs and History
-        self.messages: List[Message] = []
-        self.delayed_message_queue: List[Dict[str, Any]] = []
-        self.decisions: List[Decision] = []
-        self.triggered_event_ids: set[str] = set()
-        self.event_log: List[Dict[str, Any]] = []
-        self.latest_decision_required: Optional[Dict[str, Any]] = None
-        
-        # Telemetry / AAR stats
-        self.messages_sent_count = 0
-        self.messages_delivered_count = 0
-        self.messages_delayed_count = 0
-        self.messages_dropped_count = 0
-
-    def get_formatted_time(self) -> str:
-        mins = int(self.elapsed_seconds // 60)
-        secs = int(self.elapsed_seconds % 60)
-        return f"{mins:02d}:{secs:02d}"
-
-    def get_state(self) -> Dict[str, Any]:
-        return {
+        # Queued/dropped content never enters trainee state, including the event log.
+        result = {
             "exerciseId": self.exercise_id,
-            "scenarioName": self.scenario.name,
-            "scenarioCode": self.scenario.codeName,
+            "scenarioName": self.scenario["name"],
+            "scenarioCode": self.scenario["codeName"],
             "teamName": self.team_name,
             "isDemo": self.is_demo,
             "status": self.status,
-            "elapsedSeconds": self.elapsed_seconds,
+            "elapsedSeconds": round(self.elapsed_seconds, 3),
+            "elapsedTime": round(self.elapsed_seconds, 3),
             "totalDuration": self.total_duration,
-            "formattedTime": self.get_formatted_time(),
-            "progressPercent": min(100.0, round((self.elapsed_seconds / max(1, self.total_duration)) * 100, 1)),
+            "formattedTime": clock(self.elapsed_seconds),
+            "progressPercent": min(
+                100, self.elapsed_seconds / self.total_duration * 100
+            ),
             "speedMultiplier": self.speed_multiplier,
             "commsStatus": self.comms_status,
+            "radioStatus": self.comms_status.upper(),
             "radioDelaySeconds": self.radio_delay_seconds,
+            "radioDelay": self.radio_delay_seconds,
+            "messageLossPercentage": 100 if self.comms_status == "offline" else 0,
+            "allowIncompleteReports": False,
             "mapStatus": self.map_status,
-            "mapLastUpdated": self.map_last_updated_str,
-            "units": self.reported_units if self.map_status == "outdated" else self.units,
-            "trueUnits": self.units,
-            "activityMarkers": self.activity_markers,
-            "availableInformation": self.available_information,
-            "unavailableInformation": self.unavailable_information,
-            "messages": [m.model_dump() for m in self.messages[-25:]],
-            "decisions": [d.model_dump() for d in self.decisions],
-            "decisionRequired": self.latest_decision_required,
-            "eventLog": self.event_log[-15:]
+            "mapLastUpdated": "Live telemetry"
+            if self.map_status == "current"
+            else f"Last snapshot {clock(self.map_snapshot_second)} — {int(self.elapsed_seconds - self.map_snapshot_second)}s ago",
+            "units": []
+            if self.map_status == "unavailable"
+            else deepcopy(self.reported_units),
+            "activityMarkers": []
+            if self.map_status == "unavailable"
+            else deepcopy(self.reported_activities),
+            "availableInformation": available,
+            "unavailableInformation": unavailable,
+            "reports": deepcopy(self.reports),
+            "messages": deepcopy(
+                self.messages
+                if instructor
+                else [m for m in self.messages if m["status"] == "delivered"]
+            ),
+            "pendingMessages": [
+                {
+                    **deepcopy(self.messages[i]),
+                    "content": "",
+                    "delayRemaining": max(0, due - self.elapsed_seconds),
+                }
+                for i, due in self.pending_messages.items()
+            ],
+            "decisions": deepcopy(self.decisions),
+            "activeDecisionPoint": deepcopy(self.active_decision),
+            "eventLog": deepcopy(visible_log[-100:]),
+            "currentEvent": deepcopy(visible_log[-1]) if visible_log else None,
+            "revision": self.revision,
         }
+        result["teams"] = deepcopy(result["units"])
+        if instructor:
+            result["trueUnits"] = deepcopy(self.units)
+        return result
 
     def start(self):
-        if self.status in ["pending", "paused"]:
-            self.status = "running"
-            self.log_event("Exercise Started", f"Simulation commenced with {self.team_name}", "system")
+        if self.status != "pending":
+            raise ValueError("Only a pending exercise can start")
+        self.status, self.started_at, self.last_wall = (
+            "running",
+            time.time(),
+            time.monotonic(),
+        )
+        self.tick(0)
 
     def pause(self):
-        if self.status == "running":
-            self.status = "paused"
-            self.log_event("Exercise Paused", "Simulation clock suspended by instructor", "system")
+        self.require_running()
+        self.status = "paused"
+        self.log_event("EXERCISE_PAUSED")
 
     def resume(self):
-        if self.status == "paused":
-            self.status = "running"
-            self.log_event("Exercise Resumed", "Simulation clock resumed", "system")
+        if self.status != "paused":
+            raise ValueError("Only a paused exercise can resume")
+        self.status, self.last_wall = "running", time.monotonic()
+        self.log_event("EXERCISE_RESUMED")
 
     def end(self):
-        self.status = "completed"
-        self.log_event("Exercise Completed", "Simulation reached end of training timeline", "system")
+        if self.status == "completed":
+            return
+        self.status, self.completed_at = "completed", time.time()
+        for index in list(self.pending_messages):
+            self.drop_message(index, "Exercise ended before delivery")
+        self.active_decision = None
+        self.log_event("EXERCISE_ENDED")
 
-    def log_event(self, title: str, description: str, category: str = "general", payload: Optional[Dict[str, Any]] = None):
-        entry = {
-            "id": str(uuid.uuid4())[:8],
-            "time": self.get_formatted_time(),
-            "second": self.elapsed_seconds,
-            "title": title,
-            "description": description,
-            "category": category,
-            "payload": payload or {}
-        }
-        self.event_log.append(entry)
+    def advance_wallclock(self):
+        now = time.monotonic()
+        delta, self.last_wall = max(0, now - self.last_wall), now
+        self.tick(delta)
 
-    def tick(self, delta_seconds: float = 1.0):
+    def tick(self, delta_seconds=1.0):
         if self.status != "running":
             return
-        
-        effective_delta = delta_seconds * self.speed_multiplier
-        self.elapsed_seconds += effective_delta
-        
-        # Advance true unit positions gently along tactical route
-        for u in self.units:
-            if u["id"] == "unit-alpha":
-                # Patrol moving generally toward NE (580, 210)
-                if u["x"] < 520:
-                    u["x"] += 0.8 * effective_delta
-                if u["y"] > 240:
-                    u["y"] -= 0.3 * effective_delta
-            elif u["id"] == "unit-bravo":
-                if u["x"] < 450:
-                    u["x"] += 0.5 * effective_delta
-                if u["y"] > 350:
-                    u["y"] -= 0.35 * effective_delta
-        
-        # If map is current, mirror true units to reported units
-        if self.map_status == "current":
-            self.reported_units = [dict(u) for u in self.units]
-            self.map_last_updated_str = "Live Telemetry Active"
-        else:
-            self.map_stale_seconds += int(effective_delta)
-            mins = self.map_stale_seconds // 60
-            secs = self.map_stale_seconds % 60
-            self.map_last_updated_str = f"Last updated: {mins}m {secs}s ago (STALE)"
-
-        # Process delayed message queue
-        remaining_queue = []
-        for item in self.delayed_message_queue:
-            item["deliver_in"] -= effective_delta
-            if item["deliver_in"] <= 0:
-                msg = item["message"]
-                msg.status = "delivered"
-                self.messages.append(msg)
-                self.messages_delivered_count += 1
-                self.log_event("Delayed Message Delivered", f"From {msg.sender}: '{msg.content[:40]}...'", "comm")
-            else:
-                remaining_queue.append(item)
-        self.delayed_message_queue = remaining_queue
-
-        # Check scenario scheduled events
-        for evt in self.scenario.events:
-            if evt.id not in self.triggered_event_ids and self.elapsed_seconds >= evt.triggerTime:
-                self.triggered_event_ids.add(evt.id)
-                self.execute_scenario_event(evt)
-
-        # Check completion
-        if self.elapsed_seconds >= self.total_duration and self.status == "running":
-            self.end()
-
-    def execute_scenario_event(self, evt: ScenarioEvent):
-        payload = evt.payload
-        self.log_event(evt.title, evt.description, evt.type, payload)
-        
-        if "availableInfo" in payload:
-            self.available_information = payload["availableInfo"]
-        if "unavailableInfo" in payload:
-            self.unavailable_information = payload["unavailableInfo"]
-
-        if evt.type == "comms_degradation":
-            if "commsStatus" in payload:
-                self.comms_status = payload["commsStatus"]
-                self.radio_delay_seconds = payload.get("radioDelaySeconds", 0)
-            if "broadcastMessage" in payload:
-                bm = payload["broadcastMessage"]
-                self.inject_incoming_message(bm["sender"], bm["senderRole"], bm["content"])
-
-        elif evt.type == "conflicting_report":
-            if "reports" in payload:
-                for rep in payload["reports"]:
-                    self.inject_incoming_message(rep["source"], rep["senderRole"], rep["content"])
-            # Add conflicting activity ping to map
-            self.activity_markers.append({
-                "id": "act-conflict-west",
-                "label": "Alpha Scout Contact: Western Ridge",
-                "x": 260,
-                "y": 210,
-                "type": "contact_warning",
-                "status": "unverified"
-            })
-            self.activity_markers.append({
-                "id": "act-conflict-east",
-                "label": "SIGINT Triangulation: Eastern Canyon",
-                "x": 710,
-                "y": 320,
-                "type": "contact_warning",
-                "status": "unverified"
-            })
-
-        elif evt.type == "map_status":
-            if "mapStatus" in payload:
-                self.map_status = payload["mapStatus"]
-                self.map_stale_seconds = payload.get("staleSinceSeconds", 60)
-
-        elif evt.type == "intel_update":
-            sender = payload.get("sender", "INTELLIGENCE")
-            role = payload.get("senderRole", "INTELLIGENCE")
-            content = payload.get("content", "New intelligence update received.")
-            self.inject_incoming_message(sender, role, content)
-            # Add hostile jammer location to map
-            self.activity_markers.append({
-                "id": "act-jammer",
-                "label": "SIGINT Intercept: Mobile Jammer (EW)",
-                "x": 560,
-                "y": 180,
-                "type": "hostile_jammer",
-                "status": "high_threat"
-            })
-
-        elif evt.type == "decision_point":
-            self.latest_decision_required = {
-                "eventId": evt.id,
-                "prompt": payload.get("prompt", "Commander Decision Required"),
-                "options": payload.get("options", []),
-                "timestamp": self.get_formatted_time(),
-                "simulationSecond": self.elapsed_seconds
-            }
-
-    def inject_incoming_message(self, sender: str, role: str, content: str):
-        self.messages_sent_count += 1
-        msg = Message(
-            id=str(uuid.uuid4())[:8],
-            exerciseId=self.exercise_id,
-            sender=sender,
-            senderRole=role,
-            recipient="ALL",
-            content=content,
-            timestamp=time.time(),
-            formattedTime=self.get_formatted_time(),
-            status="delivered",
-            delayRemaining=0.0
+        target = min(
+            self.total_duration,
+            self.elapsed_seconds + max(0, delta_seconds) * self.speed_multiplier,
         )
-        self.messages.append(msg)
-        self.messages_delivered_count += 1
+        # Segment time at event/delivery boundaries so a large tick preserves causal ordering.
+        while self.status == "running":
+            due_events = [
+                e
+                for e in self.scenario["events"]
+                if e["id"] not in self.triggered_event_ids
+                and e["triggerTime"] <= self.elapsed_seconds + 1e-8
+            ]
+            for event in due_events:
+                self.triggered_event_ids.add(event["id"])
+                self.execute_event(event["type"], event["payload"])
+            for index, due in list(self.pending_messages.items()):
+                if due <= self.elapsed_seconds + 1e-8:
+                    if self.comms_status == "offline":
+                        self.drop_message(index, "Carrier lost before delivery")
+                    else:
+                        self.deliver_message(index)
+            if self.status != "running" or self.elapsed_seconds >= target - 1e-8:
+                break
+            boundaries = [target]
+            boundaries += [
+                e["triggerTime"]
+                for e in self.scenario["events"]
+                if e["id"] not in self.triggered_event_ids
+                and e["triggerTime"] > self.elapsed_seconds
+            ]
+            boundaries += [
+                due
+                for due in self.pending_messages.values()
+                if due > self.elapsed_seconds
+            ]
+            boundaries += [
+                self.elapsed_seconds
+                + math.hypot(order["x"] - unit["x"], order["y"] - unit["y"])
+                / order.get("speed", 8)
+                for unit in self.units
+                if (order := self.movements.get(unit["id"]))
+                and math.hypot(order["x"] - unit["x"], order["y"] - unit["y"]) > 1e-8
+            ]
+            next_second = min(boundaries)
+            self.advance_movement(next_second - self.elapsed_seconds)
+            self.elapsed_seconds = next_second
+            self.sync_map()
+        for index, due in self.pending_messages.items():
+            self.messages[index]["delayRemaining"] = max(0, due - self.elapsed_seconds)
+        self.revision += 1
 
-    def send_radio_message(self, sender: str, role: str, content: str) -> Message:
-        self.messages_sent_count += 1
-        msg_id = str(uuid.uuid4())[:8]
-        
-        # Check radio status
-        if self.comms_status == "offline":
-            self.messages_dropped_count += 1
-            msg = Message(
-                id=msg_id,
-                exerciseId=self.exercise_id,
-                sender=sender,
-                senderRole=role,
-                content=f"[CARRIER LOST] {content}",
-                timestamp=time.time(),
-                formattedTime=self.get_formatted_time(),
-                status="dropped"
-            )
-            self.messages.append(msg)
-            self.log_event("Message Dropped (Radio Offline)", f"Attempted from {sender}: '{content[:30]}...'", "comm")
-            return msg
-        
-        elif self.comms_status == "delayed":
-            self.messages_delayed_count += 1
-            delay = self.radio_delay_seconds or 8
-            msg = Message(
-                id=msg_id,
-                exerciseId=self.exercise_id,
-                sender=sender,
-                senderRole=role,
-                content=content,
-                timestamp=time.time(),
-                formattedTime=self.get_formatted_time(),
-                status="delayed",
-                delayRemaining=float(delay)
-            )
-            self.delayed_message_queue.append({
-                "message": msg,
-                "deliver_in": float(delay)
-            })
-            self.log_event("Message Queued (Radio Delayed)", f"From {sender}: delay {delay}s", "comm")
-            return msg
-        
-        else: # Normal
-            self.messages_delivered_count += 1
-            msg = Message(
-                id=msg_id,
-                exerciseId=self.exercise_id,
-                sender=sender,
-                senderRole=role,
-                content=content,
-                timestamp=time.time(),
-                formattedTime=self.get_formatted_time(),
-                status="delivered"
-            )
-            self.messages.append(msg)
-            return msg
+    def advance_movement(self, delta):
+        for unit in self.units:
+            order = self.movements.get(unit["id"])
+            if not order:
+                continue
+            dx, dy = order["x"] - unit["x"], order["y"] - unit["y"]
+            speed = order.get("speed", 8)
+            distance, step = math.hypot(dx, dy), speed * delta
+            unit["heading"] = math.degrees(math.atan2(dy, dx)) % 360
+            if distance <= step:
+                unit.update(x=order["x"], y=order["y"], status="operational")
+                unit.pop("destination", None)
+                del self.movements[unit["id"]]
+                # Arrival time is interpolated inside this segment.
+                previous = self.elapsed_seconds
+                self.elapsed_seconds += distance / speed
+                self.log_event(
+                    "TEAM_ARRIVED",
+                    payload={"unitId": unit["id"], "x": unit["x"], "y": unit["y"]},
+                )
+                self.elapsed_seconds = previous
+            elif distance:
+                unit["x"] += dx / distance * step
+                unit["y"] += dy / distance * step
 
-    def record_decision(self, decision_text: str, rationale: str, confidence: str, trainee_id: str = "COMMANDER_1") -> Decision:
-        dec = Decision(
-            id=str(uuid.uuid4())[:8],
-            exerciseId=self.exercise_id,
-            traineeId=trainee_id,
-            decision=decision_text,
-            rationale=rationale,
-            confidence=confidence,  # type: ignore
-            timestamp=time.time(),
-            simulationTime=self.get_formatted_time(),
-            simulationSecond=int(self.elapsed_seconds),
-            availableInformation=list(self.available_information),
-            unavailableInformation=list(self.unavailable_information)
-        )
-        self.decisions.append(dec)
-        self.latest_decision_required = None
-        self.log_event(
-            "Trainee Decision Logged",
-            f"Action: {decision_text} | Confidence: {confidence.upper()}",
-            "decision",
-            payload={"decision": decision_text, "rationale": rationale, "confidence": confidence}
-        )
-        return dec
+    def move_team(self, command, source="commander"):
+        self.require_running()
+        self.require_capacity()
+        command = MovementInput.model_validate(command)
+        if source != "instructor" and self.map_status != "current":
+            raise ValueError("A current map is required to order movement")
+        unit = next((u for u in self.units if u["id"] == command.unitId), None)
+        if not unit or unit["faction"] != "friendly":
+            raise ValueError("Friendly team not found")
+        order = {"x": command.x, "y": command.y}
+        self.movements[unit["id"]] = order
+        unit.update(destination=order, status="moving")
+        self.log_event("TEAM_MOVEMENT", payload=command.model_dump(), source=source)
+        self.sync_map()
 
-    def apply_instructor_inject(self, action: str, payload: Optional[Dict[str, Any]] = None):
+    def execute_event(self, kind, payload=None, source="scenario"):
         payload = payload or {}
-        if action == "delay_radio":
-            self.comms_status = "delayed"
-            self.radio_delay_seconds = payload.get("delay", 10)
-            self.log_event("Instructor Inject: Delay Radio", f"Forced radio latency to {self.radio_delay_seconds}s", "instructor")
-            
-        elif action == "drop_radio":
-            self.comms_status = "offline"
-            self.radio_delay_seconds = 9999
-            self.log_event("Instructor Inject: Drop Radio", "Tactical net forced offline by instructor", "instructor")
-            
-        elif action == "restore_radio":
-            self.comms_status = "normal"
-            self.radio_delay_seconds = 0
-            self.log_event("Instructor Inject: Restore Radio", "Communications returned to normal", "instructor")
-            
-        elif action == "conflicting_report":
-            report_a = payload.get("reportA", "Alpha Team: Threat detected in Sector 2")
-            report_b = payload.get("reportB", "SIGINT Relay: Sector 2 confirmed clear; threat in Sector 5")
-            self.inject_incoming_message("Team Alpha Lead", "TEAM_ALPHA", report_a)
-            self.inject_incoming_message("Signals Intelligence", "INTELLIGENCE", report_b)
-            self.log_event("Instructor Inject: Conflicting Reports", "Dispatched contradictory SITREPs", "instructor")
-            
-        elif action == "outdate_map":
-            self.map_status = "outdated"
-            self.map_stale_seconds = 180
-            self.map_last_updated_str = "Last updated: 3 minutes ago (STALE)"
-            self.log_event("Instructor Inject: Outdate Map", "Tactical map telemetry frozen", "instructor")
-            
-        elif action == "restore_map":
-            self.map_status = "current"
-            self.map_stale_seconds = 0
-            self.map_last_updated_str = "Live Telemetry Active"
-            self.log_event("Instructor Inject: Restore Map", "COP GPS feed re-synchronized", "instructor")
-            
-        elif action == "new_intelligence":
-            content = payload.get("content", "FLASH INTERCEPT: Hostile electronic jammer vehicle active at Choke Point Bravo.")
-            self.inject_incoming_message("Strategic Intercept", "INTELLIGENCE", content)
-            self.log_event("Instructor Inject: New Intel", content, "instructor")
-            
-        elif action == "custom_message":
-            sender = payload.get("sender", "INSTRUCTOR_HQ")
-            role = payload.get("role", "INSTRUCTOR")
-            content = payload.get("content", "Instructional directive issued.")
-            self.inject_incoming_message(sender, role, content)
-
-    def generate_aar(self) -> AARSummary:
-        timeline_events = []
-        for evt in self.event_log:
-            timeline_events.append({
-                "time": evt["time"],
-                "second": evt["second"],
-                "title": evt["title"],
-                "description": evt["description"],
-                "category": evt["category"]
-            })
-            
-        # Findings calculation
-        findings = []
-        if self.messages_delayed_count > 0:
-            findings.append(f"Trainee operated through {self.messages_delayed_count} delayed transmission cycles.")
-        if self.messages_dropped_count > 0:
-            findings.append(f"Trainee experienced complete blackout with {self.messages_dropped_count} dropped outbound messages.")
-        if len(self.decisions) > 0:
-            findings.append(f"Total commander decisions logged: {len(self.decisions)} with average confidence recorded.")
-        else:
-            findings.append("No explicit commander decision was registered before exercise conclusion.")
-            
-        recommendations = [
-            "Establish secondary couriers or predetermined rally azimuths prior to entering contested RF sectors.",
-            "Verify contradictory tactical scout reports through cross-bearing acoustic or secondary observation posts.",
-            "When Common Operating Picture telemetry freezes, transition immediately to terrain-association dead reckoning."
-        ]
-        
-        stats = {
-            "duration": self.get_formatted_time(),
-            "messagesTotal": self.messages_sent_count,
-            "messagesDelivered": self.messages_delivered_count,
-            "messagesDelayed": self.messages_delayed_count,
-            "messagesDropped": self.messages_dropped_count,
-            "decisionsCount": len(self.decisions),
-            "finalCommsStatus": self.comms_status,
-            "finalMapStatus": self.map_status
-        }
-        
-        return AARSummary(
-            exerciseId=self.exercise_id,
-            scenarioName=self.scenario.name,
-            teamName=self.team_name,
-            startedAt=self.start_timestamp,
-            completedAt=time.time(),
-            durationSeconds=int(self.elapsed_seconds),
-            commsTimeline=timeline_events,
-            decisions=self.decisions,
-            messages=self.messages,
-            stats=stats,
-            analyticalFindings=findings,
-            recommendations=recommendations
+        if kind == "TEAM_MOVEMENT":
+            self.move_team(payload, "instructor")
+            return
+        values = EventPayload.model_validate(payload)
+        if kind == "EXERCISE_ENDED":
+            self.end()
+            return
+        if kind == "EXERCISE_STARTED":
+            self.movements = {
+                "unit-alpha": {"x": 650, "y": 240, "speed": 2},
+                "unit-bravo": {"x": 550, "y": 350, "speed": 2},
+            }
+            for unit in self.units:
+                unit.update(
+                    destination={
+                        k: v
+                        for k, v in self.movements[unit["id"]].items()
+                        if k != "speed"
+                    },
+                    status="moving",
+                )
+        elif kind == "RADIO_DELAY":
+            self.comms_status, self.radio_delay_seconds = "delayed", values.delay
+        elif kind == "RADIO_DROPOUT":
+            self.comms_status, self.radio_delay_seconds = "offline", 0
+            for index in list(self.pending_messages):
+                self.drop_message(index, "Radio dropout flushed queued transmission")
+        elif kind == "RADIO_RESTORED":
+            self.comms_status, self.radio_delay_seconds = "normal", 0
+        elif kind in ("MAP_OUTDATED", "MAP_UNAVAILABLE", "MAP_RESTORED"):
+            self.map_status = {
+                "MAP_OUTDATED": "outdated",
+                "MAP_UNAVAILABLE": "unavailable",
+                "MAP_RESTORED": "current",
+            }[kind]
+        elif kind == "CONFLICTING_REPORT":
+            group = uid()
+            for sender, role, content, x, y in [
+                ("Alpha scout", "TEAM_ALPHA", values.reportA, 260, 210),
+                ("Intelligence relay", "INTELLIGENCE", values.reportB, 710, 320),
+            ]:
+                self.receive_report(sender, role, content, group)
+                self.activities.append(
+                    {
+                        "id": uid(),
+                        "label": "Western ridge — Alpha scout"
+                        if x == 260
+                        else "Eastern sector — intelligence",
+                        "x": x,
+                        "y": y,
+                        "type": "contact_warning",
+                        "status": "unverified",
+                    }
+                )
+        elif kind == "NEW_INTELLIGENCE":
+            # Separate intelligence relay: radio blackout does not magically restore the radio.
+            self.receive_report("Intelligence relay", "INTELLIGENCE", values.content)
+            self.activities.append(
+                {
+                    "id": uid(),
+                    "label": "Sector 4 activity — medium reliability",
+                    "x": 560,
+                    "y": 180,
+                    "type": "contact_warning",
+                    "status": "unverified",
+                }
+            )
+        elif kind == "DECISION_REQUIRED":
+            self.active_decision = {
+                "id": uid(),
+                "timestamp": self.elapsed_seconds,
+                "simulationSecond": self.elapsed_seconds,
+                "title": "Coordination under uncertainty",
+                "situation": "Radio is degraded and reports disagree. Explain how you will coordinate your teams and verify the information.",
+                "availableActions": [
+                    {
+                        "id": "hold",
+                        "label": "Hold and verify",
+                        "description": "Pause movement and seek independent confirmation.",
+                    },
+                    {
+                        "id": "runner",
+                        "label": "Use an alternate communication channel",
+                        "description": "Arrange a runner or pre-agreed rendezvous.",
+                    },
+                    {
+                        "id": "plan",
+                        "label": "Follow the last agreed plan",
+                        "description": "Continue with explicit assumptions and a review point.",
+                    },
+                ],
+                "status": "active",
+            }
+        for unit in self.units:
+            unit["communicationStatus"] = {
+                "normal": "NORMAL",
+                "delayed": "DELAYED",
+                "offline": "LOST",
+            }[self.comms_status]
+        self.sync_map()
+        # Avoid copying new report content or hidden coordinates into a generic event.
+        self.log_event(
+            kind,
+            payload={
+                "radioStatus": self.comms_status.upper(),
+                "radioDelay": self.radio_delay_seconds,
+                "mapStatus": self.map_status,
+            },
+            source=source,
         )
 
+    def apply_instructor_inject(self, action, payload=None):
+        if self.status not in ("running", "paused"):
+            raise ValueError("Start the exercise before injecting events")
+        self.require_capacity()
+        if action == "custom_message":
+            values = EventPayload.model_validate(payload or {})
+            self.receive_report(values.sender, "INSTRUCTOR", values.content)
+        else:
+            self.execute_event(INJECT_TYPES[action], payload, "instructor")
 
-class ScenarioEngineManager:
-    _instance = None
-    
+    def receive_report(self, sender, role, content, conflict=None):
+        message = self.make_message(sender, role, content)
+        message.update(
+            isConflicting=bool(conflict),
+            conflictGroupId=conflict,
+            messageType="CONFLICTING_REPORT" if conflict else "INTEL_REPORT",
+            channel="INTELLIGENCE_RELAY",
+        )
+        self.messages.append(message)
+        self.deliver_message(len(self.messages) - 1)
+
+    def make_message(self, sender, role, content):
+        return {
+            "id": uid(),
+            "exerciseId": self.exercise_id,
+            "sender": sender,
+            "senderRole": role,
+            "recipient": "ALL",
+            "content": content,
+            "timestamp": time.time(),
+            "timestampGenerated": self.elapsed_seconds,
+            "formattedTime": clock(self.elapsed_seconds),
+            "status": "sent",
+            "deliveryStatus": "PENDING",
+            "communicationState": self.comms_status,
+            "delayRemaining": 0,
+        }
+
+    def send_radio_message(self, sender, role, content):
+        self.require_running()
+        self.require_capacity()
+        message = self.make_message(sender, role, content)
+        self.messages.append(message)
+        index = len(self.messages) - 1
+        if self.comms_status == "offline":
+            self.drop_message(index, "Radio net offline")
+        elif self.comms_status == "delayed" and self.radio_delay_seconds:
+            message.update(
+                status="delayed",
+                deliveryStatus="DELAYED",
+                wasDelayed=True,
+                delayRemaining=self.radio_delay_seconds,
+            )
+            self.pending_messages[index] = (
+                self.elapsed_seconds + self.radio_delay_seconds
+            )
+            self.log_event(
+                "MESSAGE_QUEUED",
+                payload={
+                    "messageId": message["id"],
+                    "sender": sender,
+                    "delay": self.radio_delay_seconds,
+                },
+            )
+        else:
+            self.deliver_message(index)
+        return deepcopy(message)
+
+    def deliver_message(self, index):
+        message = self.messages[index]
+        self.pending_messages.pop(index, None)
+        message.update(
+            status="delivered",
+            deliveryStatus="DELIVERED",
+            timestampDelivered=self.elapsed_seconds,
+            formattedTimeDelivered=clock(self.elapsed_seconds),
+            delayRemaining=0,
+        )
+        self.reports.append(
+            {
+                "id": message["id"],
+                "source": message["sender"],
+                "content": message["content"],
+                "timestamp": self.elapsed_seconds,
+                "reliability": "unverified"
+                if message.get("isConflicting")
+                else "medium",
+                "conflictGroupId": message.get("conflictGroupId"),
+            }
+        )
+        self.log_event(
+            "MESSAGE_DELIVERED",
+            payload={"messageId": message["id"], "sender": message["sender"]},
+        )
+
+    def drop_message(self, index, reason):
+        self.pending_messages.pop(index, None)
+        message = self.messages[index]
+        message.update(
+            status="dropped",
+            deliveryStatus="DROPPED",
+            delayRemaining=0,
+            dropReason=reason,
+        )
+        self.log_event(
+            "MESSAGE_DROPPED",
+            reason,
+            {"messageId": message["id"], "sender": message["sender"]},
+        )
+
+    def record_decision(
+        self,
+        decision_text,
+        rationale,
+        confidence,
+        trainee_id="Commander",
+        selected_action_id="",
+    ):
+        self.require_running()
+        self.require_capacity()
+        available, unavailable = self.information()
+        point = self.active_decision
+        if selected_action_id and (
+            not point
+            or selected_action_id not in [a["id"] for a in point["availableActions"]]
+        ):
+            raise ValueError("Decision action is not active")
+        decision = {
+            "id": uid(),
+            "exerciseId": self.exercise_id,
+            "traineeId": trainee_id,
+            "decision": decision_text,
+            "selectedActionLabel": decision_text,
+            "decisionPointId": point["id"] if point else "",
+            "selectedActionId": selected_action_id,
+            "rationale": rationale,
+            "confidence": confidence,
+            "scenarioTimestamp": self.elapsed_seconds,
+            "simulationSecond": self.elapsed_seconds,
+            "simulationTime": clock(self.elapsed_seconds),
+            "realTimestamp": time.time(),
+            "communicationState": self.comms_status,
+            "mapStatus": self.map_status,
+            "availableInformation": available,
+            "unavailableInformation": unavailable,
+            "informationSnapshot": {
+                "reportIds": [r["id"] for r in self.reports],
+                "units": []
+                if self.map_status == "unavailable"
+                else deepcopy(self.reported_units),
+                "mapSnapshotSecond": self.map_snapshot_second,
+            },
+        }
+        self.decisions.append(decision)
+        self.active_decision = None
+        self.log_event(
+            "DECISION_SUBMITTED",
+            payload={"decisionId": decision["id"], "traineeId": trainee_id},
+        )
+        return deepcopy(decision)
+
+    def generate_aar(self):
+        delivered = sum(m["status"] == "delivered" for m in self.messages)
+        dropped = sum(m["status"] == "dropped" for m in self.messages)
+        delayed = sum(bool(m.get("wasDelayed")) for m in self.messages)
+        return {
+            "exerciseId": self.exercise_id,
+            "scenarioName": self.scenario["name"],
+            "teamName": self.team_name,
+            "startedAt": self.started_at,
+            "completedAt": self.completed_at,
+            "durationSeconds": self.elapsed_seconds,
+            "isFinal": self.status == "completed",
+            "commsTimeline": deepcopy(self.event_log),
+            "fullEventLog": deepcopy(self.event_log),
+            "decisions": deepcopy(self.decisions),
+            "messages": deepcopy(self.messages),
+            "pendingMessages": [
+                deepcopy(self.messages[i]) for i in self.pending_messages
+            ],
+            "initialUnits": deepcopy(self.scenario["initialUnits"]),
+            "stats": {
+                "duration": clock(self.elapsed_seconds),
+                "messagesTotal": len(self.messages),
+                "messagesDelivered": delivered,
+                "messagesDelayed": delayed,
+                "messagesDropped": dropped,
+                "messagesPending": len(self.pending_messages),
+                "decisionsCount": len(self.decisions),
+                "finalCommsStatus": self.comms_status,
+                "finalMapStatus": self.map_status,
+            },
+            "analyticalFindings": [
+                f"{len(self.decisions)} decisions recorded with information snapshots.",
+                f"{delivered} delivered, {dropped} dropped, {len(self.pending_messages)} pending transmissions.",
+            ],
+            "recommendations": [
+                "Compare each rationale with information received at that time.",
+                "Review assumptions and alternate coordination channels. No tactical correctness score is assigned.",
+            ],
+        }
+
+
+class EngineManager:
     def __init__(self):
-        self.exercises: Dict[str, ExerciseSession] = {}
-        self._background_task = None
-        # Create standard default demo exercise
-        self.create_exercise("exercise-demo-1", is_demo=True)
-        
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        self.exercises = {}
 
-    def create_exercise(self, exercise_id: Optional[str] = None, is_demo: bool = True, team_name: str = "Task Force Alpha") -> ExerciseSession:
-        if not exercise_id:
-            exercise_id = f"ex-{str(uuid.uuid4())[:6]}"
-        scenario = get_operation_silent_link(is_demo=is_demo)
-        session = ExerciseSession(exercise_id, scenario, team_name=team_name, is_demo=is_demo)
+    def create_exercise(
+        self, exercise_id=None, is_demo=True, team_name="Task Force Alpha"
+    ):
+        if len(self.exercises) >= settings.MAX_EXERCISES:
+            raise ValueError(
+                "Room capacity reached; completed rooms expire after 24 hours"
+            )
+        exercise_id = exercise_id or "ex-" + uuid.uuid4().hex[:12]
+        if exercise_id in self.exercises:
+            raise ValueError("Exercise already exists")
+        session = ExerciseSession(exercise_id, team_name=team_name, is_demo=is_demo)
         self.exercises[exercise_id] = session
         return session
 
-    def get_exercise(self, exercise_id: str) -> Optional[ExerciseSession]:
+    def get_exercise(self, exercise_id):
         return self.exercises.get(exercise_id)
 
-    def list_exercises(self) -> List[Dict[str, Any]]:
+    def list_exercises(self):
         return [
             {
-                "id": ex.exercise_id,
-                "scenarioName": ex.scenario.name,
-                "teamName": ex.team_name,
-                "status": ex.status,
-                "elapsedSeconds": ex.elapsed_seconds,
-                "totalDuration": ex.total_duration,
-                "commsStatus": ex.comms_status,
-                "mapStatus": ex.map_status,
-                "decisionsCount": len(ex.decisions)
+                "exerciseId": s.exercise_id,
+                "scenarioName": s.scenario["name"],
+                "teamName": s.team_name,
+                "status": s.status,
+                "elapsedSeconds": s.elapsed_seconds,
             }
-            for ex in self.exercises.values()
+            for s in self.exercises.values()
         ]
 
-    def tick_all(self, delta_seconds: float = 1.0):
-        for session in list(self.exercises.values()):
-            if session.status == "running":
-                session.tick(delta_seconds)
 
-engine_manager = ScenarioEngineManager.get_instance()
+engine_manager = EngineManager()

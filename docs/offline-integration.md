@@ -34,3 +34,7 @@ The user's ZIP supplied five screenshots matching Kakul's root TACTICAL-SIM appl
 Vercel must build from the repository root. The connected Vercel account returned only a different project, so the `tactical-sim.vercel.app` project setting and deployment could not be inspected or changed with that connection. The replacement is local and ready for a root-app deployment.
 
 The replacement passed production build/TypeScript, tactical-component lint and the migrated engine regression test. Browser verification passed the landing page, Start Training role modal, Commander navigation, exercise start/pause, map zoom and keyboard unit selection. A desktop landing-page preview was captured; the default smaller viewport also rendered the responsive landing page.
+
+## Shared backend integration (October 3, 2026)
+
+The offline-only limitations above describe the earlier integration phase. The new /training workflow now creates real FastAPI exercise rooms and joins instructor, commander and team browsers to the same authoritative timeline. It reuses the tactical map, PanelCard and Kakul shell/theme. Backend records drive communications, movement, injects, decisions and AAR; the browser-only demo remains separate. Generated room IDs also select the shared console in the existing Commander and Instructor detail routes. See [backend.md](backend.md) for exact contracts, run instructions and current prototype limits.

@@ -2,6 +2,7 @@
 
 import React, { use, useState } from "react";
 import Link from "next/link";
+import { SharedExercise } from "@/components/integration/SharedExercise";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PanelCard } from "@/components/ui/PanelCard";
@@ -20,6 +21,12 @@ interface PageProps {
 }
 
 export default function ExerciseDetailPage({ params }: PageProps) {
+  const { id } = use(params);
+  if (/^ex-[a-f0-9]{12}$/.test(id)) return <SharedExercise key={id} id={id} initialRole="INSTRUCTOR" />;
+  return <SampleExerciseDetail params={params} />;
+}
+
+function SampleExerciseDetail({ params }: PageProps) {
   const { id } = use(params);
   const { addToast } = useToast();
 
