@@ -43,7 +43,7 @@ export default function TrainingLobby() {
   }
 
   return <AppShell pageTitle="SHARED EXERCISES" role="instructor">
-    <div className="mb-8"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#71805A]">LIVE TRAINING</p><h1 className="mt-2 text-3xl font-black text-[#263229]">One exercise. Shared decisions.</h1><p className="mt-3 max-w-2xl text-sm text-[#687066]">Create Operation Silent Link, then invite a commander and field teams using the same room ID. The simulation server controls the clock, communication failures and map updates.</p></div>
+    <div className="mb-8"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#71805A]">LIVE TRAINING</p><h1 className="mt-2 text-3xl font-black text-[#263229]">One exercise. Shared decisions.</h1><p className="mt-3 max-w-2xl text-sm text-[#687066]">Choose an Indian terrain and training force, then invite a commander and teams using the same room ID. Switch between 2D and 3D while the server controls movement, radio failures and map updates.</p></div>
     {error && <div role="alert" className="mb-6 rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-4 text-sm text-[#A94A3F]">{error}<p className="mt-2">Start the FastAPI server on port 8000, or configure the backend URL for this frontend.</p></div>}
     <div className="grid gap-6 lg:grid-cols-2">
       <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Create instructor room</span>}>
@@ -52,7 +52,7 @@ export default function TrainingLobby() {
           <label className="block text-xs font-bold text-[#344438]">Exercise length<select className={field + " mt-2"} value={demo ? "demo" : "standard"} onChange={event => setDemo(event.target.value === "demo")}><option value="demo">2-minute demonstration</option><option value="standard">15-minute training</option></select></label>
           <TrainingAreaFields value={trainingArea} onChange={setTrainingArea} disabled={busy} />
           <button className={button} disabled={busy || !teamName.trim() || Boolean(trainingAreaError(trainingArea))}>{busy ? "Creating…" : "Create room"}</button>
-          <p className="text-xs text-[#687066]">Your instructor key stays in this browser. Room records stay in server memory until restart or expiry; export your AAR before then.</p>
+          <p className="text-xs text-[#687066]">Your instructor key stays in this browser. Export your review after training. Exercise recovery depends on whether the backend has database persistence enabled.</p>
         </form>
       </PanelCard>
       <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Join an exercise</span>}>
@@ -66,6 +66,6 @@ export default function TrainingLobby() {
     <div className="mt-6"><PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Server exercises</span>}>
       {loading ? <p className="text-sm text-[#687066]">Connecting to simulation server…</p> : rooms.length ? <ul className="divide-y divide-[#D9D8CE]">{rooms.map(room => <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={room.exerciseId}><div><p className="font-black text-[#344438]">{room.teamName}</p><p className="mt-1 text-xs font-mono text-[#687066]">{room.exerciseId} · {room.status.toUpperCase()}</p></div><Link className={button} href={`/training/${room.exerciseId}`}>Join / review</Link></li>)}</ul> : <p className="text-sm text-[#687066]">No rooms available. Create a new exercise to begin.</p>}
     </PanelCard></div>
-    <Link className="mt-6 inline-block text-xs font-bold text-[#556B3F] underline" href="/commander/simulation/ex-001">Open the separate offline map demonstration</Link>
+    <Link className="mt-6 inline-block text-xs font-bold text-[#556B3F] underline" href="/maps">Explore maps in a single-browser practice exercise</Link>
   </AppShell>;
 }

@@ -1,7 +1,8 @@
 import secrets
 
-from app.scenario_engine.engine import engine_manager
 from fastapi import HTTPException
+
+from app.scenario_engine.engine import engine_manager
 
 
 def get_session(exercise_id):
@@ -50,10 +51,7 @@ def control(session, command):
             raise ValueError("Choose the training area before starting the exercise")
         if command.trainingArea is None:
             raise ValueError("trainingArea is required")
-        session.training_area = command.trainingArea.model_dump()
-        session.log_event(
-            "TRAINING_AREA_CHANGED", payload={"trainingArea": session.training_area}
-        )
+        session.set_training_area(command.trainingArea.model_dump())
     elif command.action == "set_speed":
         if command.speedMultiplier is None:
             raise ValueError("speedMultiplier is required")

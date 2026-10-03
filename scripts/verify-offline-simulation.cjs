@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const ts = require('typescript');
 const original = require.extensions['.ts'];
 require.extensions['.ts'] = (module, filename) => {
-  const compiled = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } });
+  const compiled = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true, target: ts.ScriptTarget.ES2020 } });
   module._compile(compiled.outputText, filename);
 };
 const { LocalSimulationEngine } = require('../src/simulation/lib/simulation.ts');

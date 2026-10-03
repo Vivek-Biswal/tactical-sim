@@ -44,7 +44,7 @@ const TopoGridBackground = () => (
 
     {/* Edge Coordinates */}
     <div className="absolute top-4 left-4 text-[#687064] text-xs font-mono opacity-50 font-bold tracking-widest">
-      LAT 34.0522° N / LONG 118.2437° W
+      INDIA · 10 TRAINING ENVIRONMENTS
     </div>
     <div className="absolute bottom-4 right-4 text-[#687064] text-xs font-mono opacity-50 font-bold tracking-widest">
       GRID SEC: 4-ALPHA-TANGO
@@ -74,7 +74,7 @@ export default function LandingPage() {
             <div className="hidden md:flex gap-8 items-center">
               <a href="#" className="text-[#F2F0E7] hover:text-[#A88B52] text-sm font-bold tracking-widest transition-colors">HOME</a>
               <a href="#features" className="text-[#F2F0E7] hover:text-[#A88B52] text-sm font-bold tracking-widest transition-colors">TRAINING</a>
-              <a href="#" className="text-[#F2F0E7] hover:text-[#A88B52] text-sm font-bold tracking-widest transition-colors">SCENARIOS</a>
+              <a href="/maps" className="text-[#F2F0E7] hover:text-[#A88B52] text-sm font-bold tracking-widest transition-colors">MAPS</a>
               <a href="#" className="text-[#F2F0E7] hover:text-[#A88B52] text-sm font-bold tracking-widest transition-colors">ABOUT</a>
             </div>
 

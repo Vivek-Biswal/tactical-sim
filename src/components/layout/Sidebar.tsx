@@ -23,6 +23,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { label: "Training Maps", href: "/maps", icon: Map, category: "OVERVIEW" },
   { label: "Shared Exercises", href: "/training", icon: Users, category: "OVERVIEW" },
   { label: "Dashboard",        href: "/dashboard",  icon: LayoutDashboard, category: "OVERVIEW"  },
   { label: "Instructor",       href: "/instructor", icon: GraduationCap,   category: "ROLES"     },

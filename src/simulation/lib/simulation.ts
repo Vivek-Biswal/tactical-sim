@@ -1,10 +1,12 @@
-import { DEFAULT_TRAINING_AREA } from "./geography";
+import { DEFAULT_TRAINING_AREA, getTrainingPreset, trainingAreaError } from "./geography";
+import type { TrainingArea } from "../types/geography";
 import { ExerciseState, AARReportData, SimulationEventLog } from "../types/exercise";
-import { Scenario, ScenarioEvent, ActivityMarker } from "../types/scenario";
-import { RadioMessage, MessageSenderRole, MessageType, DeliveryStatus } from "../types/communication";
+import { Scenario, ScenarioEvent, ScenarioEventPayload, ActivityMarker, TacticalUnit, CommsStatus } from "../types/scenario";
+import { RadioMessage, MessageType } from "../types/communication";
 import { DecisionRecord, DecisionPoint } from "../types/decision";
 import { getDemoScenario } from "../data/demoScenario";
 import { advanceUnit, clampPoint, type Point } from "./mapGeometry";
+import { createTrainingUnits, domainOf, movementError, trainingActivities } from "./training";
 const formatSimTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
 export class LocalSimulationEngine {
@@ -19,12 +21,41 @@ export class LocalSimulationEngine {
   private trueActivityMarkers: ActivityMarker[] = [];
 
   constructor(exerciseId: string = "exercise-demo-1", isDemo: boolean = true) {
-    this.scenario = getDemoScenario(isDemo);
+    this.scenario = this.trainingScenario(isDemo, DEFAULT_TRAINING_AREA);
     this.state = this.createInitialState(exerciseId, isDemo);
     this.trueActivityMarkers = structuredClone(this.state.activityMarkers);
   }
 
-  private createInitialState(exerciseId: string, isDemo: boolean): ExerciseState {
+  private trainingScenario(isDemo: boolean, area: TrainingArea): Scenario {
+    const scenario = getDemoScenario(isDemo);
+    const preset = getTrainingPreset(area);
+    if (!preset) return scenario;
+    scenario.operationalArea = area.name;
+    scenario.initialUnits = createTrainingUnits(area, scenario.initialUnits);
+    scenario.initialActivityMarkers = trainingActivities(area);
+    // Existing uncertainty/communications/decision timing stays unchanged.
+    // Preset patrols replace the old ground-only, fixed-coordinate movement.
+    scenario.events = scenario.events.filter(event => event.id !== "evt-alpha-move");
+    for (const event of scenario.events) {
+      if (event.type === "CONFLICTING_REPORT" && event.payload.reports) {
+        event.payload.reports = [
+          { source: scenario.initialUnits[0].name, senderRole: "TEAM_ALPHA", content: "OBSERVATION: Unidentified activity reported near the observation area. Verify before redirecting units." },
+          { source: "Remote sensor", senderRole: "INTELLIGENCE", content: "SENSOR REPORT: No matching activity detected there. Activity may be near another checkpoint. The reports conflict; seek confirmation." },
+        ];
+      }
+      if (event.type === "decision_point") {
+        event.payload.prompt = "Two sources disagree about unidentified activity while communication is unreliable. Which source will you follow, or will you wait for confirmation? Explain your decision.";
+        event.payload.options = [
+          { id: "trust-alpha", label: "Follow Alpha's observation", description: "Prioritise the report from the lead patrol. Record why you trust it." },
+          { id: "trust-sigint", label: "Follow the remote sensor", description: "Prioritise the independent sensor report. Record why you trust it." },
+          { id: "hold-verify", label: "Hold and verify", description: "Pause the lead patrol and request confirmation before proceeding.", consequence: { type: "move_unit", targetUnitId: "unit-alpha", status: "operational" } },
+        ];
+      }
+    }
+    return scenario;
+  }
+
+  private createInitialState(exerciseId: string, isDemo: boolean, area: TrainingArea = DEFAULT_TRAINING_AREA): ExerciseState {
     return {
       exerciseId,
       scenarioName: this.scenario.name,
@@ -43,7 +74,7 @@ export class LocalSimulationEngine {
       allowIncompleteReports: false,
       mapStatus: "current",
       mapLastUpdated: "Live Telemetry Active",
-      trainingArea: { ...DEFAULT_TRAINING_AREA },
+      trainingArea: { ...area },
       units: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       trueUnits: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       activityMarkers: structuredClone(this.scenario.initialActivityMarkers ?? []),
@@ -94,6 +125,21 @@ export class LocalSimulationEngine {
     this.notify();
   }
 
+  /** Configuration is immutable once an exercise has begun. Reset to choose again. */
+  public setTrainingArea(area: TrainingArea): boolean {
+    const preset = getTrainingPreset(area);
+    if (this.state.status !== "pending" || trainingAreaError(area) || (preset && !preset.supportedForces.includes(area.forceProfile ?? preset.defaultForce))) return false;
+    this.scenario = this.trainingScenario(this.state.isDemo, area);
+    this.movements.clear();
+    this.triggeredEventIds.clear();
+    this.lastMapUpdateSecond = 0;
+    this.state = this.createInitialState(this.state.exerciseId, this.state.isDemo, area);
+    this.trueActivityMarkers = structuredClone(this.state.activityMarkers);
+    this.logEvent("Training Area Selected", `${area.name} · ${area.forceProfile ?? preset?.defaultForce ?? "army"}`, "system", { trainingArea: { ...area } });
+    this.notify();
+    return true;
+  }
+
   public start() {
     if (this.state.status === "running" || this.state.status === "completed") return;
     this.state.status = "running";
@@ -104,11 +150,18 @@ export class LocalSimulationEngine {
         this.triggerScenarioEvent(event);
       }
     }
+    for (const unit of this.state.trueUnits ?? []) {
+      if (unit.patrolRoute && unit.patrolRoute.length > 1) {
+        unit.destination = { ...unit.patrolRoute[unit.patrolIndex ?? 1] };
+        unit.status = "moving";
+      }
+    }
+    this.refreshUnitComms();
     this.refreshMap();
     this.notify();
 
     if (!this.timerId) {
-      this.timerId = setInterval(() => this.tick(1.0), 1000);
+      this.timerId = setInterval(() => this.tick(0.1), 100);
     }
   }
 
@@ -148,12 +201,13 @@ export class LocalSimulationEngine {
       this.timerId = null;
     }
     const demo = isDemo !== undefined ? isDemo : this.state.isDemo;
-    this.scenario = getDemoScenario(demo);
+    const area = this.state.trainingArea ?? DEFAULT_TRAINING_AREA;
+    this.scenario = this.trainingScenario(demo, area);
     this.triggeredEventIds.clear();
     this.movements.clear();
     this.lastMapUpdateSecond = 0;
     this.startTimestamp = Date.now();
-    this.state = this.createInitialState(this.state.exerciseId, demo);
+    this.state = this.createInitialState(this.state.exerciseId, demo, area);
     this.trueActivityMarkers = structuredClone(this.state.activityMarkers);
     this.notify();
   }
@@ -189,6 +243,26 @@ export class LocalSimulationEngine {
       if (advanceUnit(unit, movement.target, movement.speed * effectiveDelta)) {
         this.movements.delete(id);
         this.logEvent("Team Arrived", `${unit.name} reached its destination`, "UNIT_MOVE", { targetUnitId: id, x: unit.x, y: unit.y, status: unit.status });
+      }
+    }
+    for (const unit of this.state.trueUnits ?? []) {
+      const route = unit.patrolRoute;
+      if (!route || route.length < 2 || unit.status === "damaged" || this.movements.has(unit.id)) continue;
+      let distanceLeft = (unit.speedGridPerSecond ?? 10) * effectiveDelta;
+      let legs = 0;
+      while (distanceLeft > 0 && legs < 1000) {
+        const index = (unit.patrolIndex ?? 1) % route.length;
+        const target = route[index];
+        const legDistance = Math.hypot(target.x - unit.x, target.y - unit.y);
+        unit.destination = { ...target };
+        const arrived = advanceUnit(unit, target, distanceLeft);
+        if (!arrived) break;
+        distanceLeft -= legDistance;
+        unit.patrolIndex = (index + 1) % route.length;
+        legs += 1;
+        this.logEvent("Patrol Waypoint Reached", `${unit.name} reached a route waypoint`, "UNIT_MOVE", { targetUnitId: unit.id, x: unit.x, y: unit.y, domain: domainOf(unit) });
+        unit.destination = { ...route[unit.patrolIndex] };
+        unit.status = "moving";
       }
     }
     
@@ -237,7 +311,8 @@ export class LocalSimulationEngine {
   public moveTeam(id: string, destination: Point): boolean {
     const unit = this.state.trueUnits?.find(u => u.id === id);
     if (this.state.status !== "running" || this.state.mapStatus !== "current" || unit?.faction !== "friendly" || !Number.isFinite(destination.x) || !Number.isFinite(destination.y)) return false;
-    this.queueMovement(id, destination);
+    if (!unit || movementError(unit, destination, this.state.trainingArea)) return false;
+    if (!this.queueMovement(id, destination)) return false;
     this.refreshMap();
     this.notify();
     return true;
@@ -245,14 +320,21 @@ export class LocalSimulationEngine {
 
   private queueMovement(id: string, destination: Point, duration?: number) {
     const unit = this.state.trueUnits?.find(u => u.id === id);
-    if (!unit || !Number.isFinite(destination.x) || !Number.isFinite(destination.y)) return;
+    if (!unit || !Number.isFinite(destination.x) || !Number.isFinite(destination.y)) return false;
     const target = clampPoint(destination);
+    if (movementError(unit, target, this.state.trainingArea)) {
+      this.logEvent("Movement Not Applied", `${unit.name}: ${movementError(unit, target, this.state.trainingArea)}`, "system");
+      return false;
+    }
     const distance = Math.hypot(target.x - unit.x, target.y - unit.y);
-    const speed = duration && duration > 0 ? distance / duration : 20;
+    const speed = duration && duration > 0 ? distance / duration : unit.speedGridPerSecond ?? 20;
+    delete unit.patrolRoute;
+    delete unit.patrolIndex;
     unit.destination = target;
     unit.status = "moving";
     this.movements.set(id, { target, speed });
     this.logEvent("Team Movement Ordered", `${unit.name} moving to ${Math.round(target.x)}, ${Math.round(target.y)}`, "UNIT_MOVE", { targetUnitId: id, fromX: unit.x, fromY: unit.y, destination: target, speed });
+    return true;
   }
 
   private updateActivity(marker: ActivityMarker) {
@@ -260,6 +342,11 @@ export class LocalSimulationEngine {
     const value = { ...marker, ...clampPoint(marker) };
     if (index < 0) this.trueActivityMarkers.push(value);
     else this.trueActivityMarkers[index] = value;
+  }
+
+  private refreshUnitComms() {
+    const status = { normal: "NORMAL", delayed: "DELAYED", degraded: "DEGRADED", offline: "LOST" } as const;
+    for (const unit of this.state.trueUnits ?? []) unit.communicationStatus = status[this.state.commsStatus];
   }
 
   private refreshMap() {
@@ -281,7 +368,15 @@ export class LocalSimulationEngine {
   }
 
   private triggerScenarioEvent(evt: ScenarioEvent) {
-    const payload = evt.payload;
+    const payload = { ...evt.payload };
+    if (getTrainingPreset(this.state.trainingArea ?? DEFAULT_TRAINING_AREA)) {
+      const contact = this.state.trueUnits?.find(unit => unit.id === (payload.targetUnitId ?? "contact-1"));
+      if (evt.type === "CONTACT_DETECTED" && contact) {
+        payload.x = contact.x;
+        payload.y = contact.y;
+      }
+      if (payload.activityMarker && contact) payload.activityMarker = { ...payload.activityMarker, x: contact.x, y: contact.y };
+    }
     if (payload.mapStatus) this.state.mapStatus = payload.mapStatus;
     if (payload.activityMarker) this.updateActivity(payload.activityMarker);
     this.logEvent(evt.title, evt.description, evt.type, payload);
@@ -304,9 +399,9 @@ export class LocalSimulationEngine {
             if (typeof payload.y === "number") unit.y = clampPoint({ x: unit.x, y: payload.y }).y;
           }
           if (payload.heading !== undefined) unit.heading = payload.heading as number;
-          if (payload.status !== undefined) unit.status = payload.status as any;
-          if (payload.faction !== undefined) unit.faction = payload.faction as any;
-          if (payload.communicationStatus !== undefined) unit.communicationStatus = payload.communicationStatus as any;
+          if (payload.status !== undefined) unit.status = payload.status;
+          if (payload.faction !== undefined) unit.faction = payload.faction;
+          if (payload.communicationStatus !== undefined) unit.communicationStatus = payload.communicationStatus;
         }
       }
     } else if (evt.type === "INTEL_REPORT") {
@@ -325,10 +420,11 @@ export class LocalSimulationEngine {
       }
     } else if (evt.type === "comms_degradation") {
       if (payload.commsStatus) {
-        this.state.commsStatus = payload.commsStatus as any;
+        this.state.commsStatus = payload.commsStatus;
         this.state.radioDelaySeconds = Number(payload.radioDelaySeconds) || 0;
         this.state.messageLossPercentage = Number(payload.messageLossPercentage) || 0;
         this.state.allowIncompleteReports = !!payload.allowIncompleteReports;
+        this.refreshUnitComms();
       }
       if (payload.broadcastMessage) {
         const bm = payload.broadcastMessage;
@@ -337,7 +433,7 @@ export class LocalSimulationEngine {
       }
     } else if (evt.type === "map_status") {
       if (payload.mapStatus) {
-        this.state.mapStatus = payload.mapStatus as any;
+        this.state.mapStatus = payload.mapStatus;
         this.refreshMap();
       }
     } else if (evt.type === "decision_point") {
@@ -345,7 +441,7 @@ export class LocalSimulationEngine {
         id: evt.id,
         title: payload.title as string || "Commander Decision Required",
         situation: payload.prompt as string || payload.situation as string || "Situation unclear.",
-        availableActions: (payload.options as any[]) || [],
+        availableActions: payload.options || [],
         status: "active",
         timestamp: Date.now(),
         simulationSecond: this.state.elapsedSeconds,
@@ -511,7 +607,7 @@ export class LocalSimulationEngine {
   private processDecisionConsequence(consequence: Record<string, unknown>) {
     if (consequence.type === "schedule_event") {
        if (consequence.eventPayload) {
-          const payload = consequence.eventPayload as any;
+          const payload = consequence.eventPayload as ScenarioEventPayload & { type?: string };
           if (payload.type === "STATUS_CHANGE" && payload.targetUnitId && this.state.trueUnits) {
              const unit = this.state.trueUnits.find(u => u.id === payload.targetUnitId);
              if (unit && payload.status) {
@@ -525,9 +621,14 @@ export class LocalSimulationEngine {
          const unit = this.state.trueUnits.find(u => u.id === consequence.targetUnitId);
          if (unit) {
             if (consequence.sector) unit.sector = consequence.sector as string;
-            if (consequence.status) unit.status = consequence.status as any;
+            if (consequence.status) unit.status = consequence.status as TacticalUnit["status"];
             if (typeof consequence.x === "number" && typeof consequence.y === "number") {
               this.queueMovement(unit.id, { x: consequence.x, y: consequence.y });
+            } else if (consequence.status === "operational") {
+              this.movements.delete(unit.id);
+              delete unit.patrolRoute;
+              delete unit.patrolIndex;
+              delete unit.destination;
             }
             
             this.logEvent("Unit Moved (Decision Consequence)", `Unit ${unit.name} moving based on commander order`, "UNIT_MOVE", {
@@ -544,10 +645,11 @@ export class LocalSimulationEngine {
 
   public applyInstructorInject(action: string, payload?: Record<string, unknown>) {
     if (action === "set_comms") {
-      this.state.commsStatus = (payload?.status as any) || "normal";
+      this.state.commsStatus = (payload?.status as CommsStatus) || "normal";
       this.state.radioDelaySeconds = Number(payload?.delay || 0);
       this.state.messageLossPercentage = Number(payload?.loss || 0);
       this.state.allowIncompleteReports = !!payload?.incomplete;
+      this.refreshUnitComms();
       this.logEvent("Instructor Inject: Comms State", `Forced comms to ${this.state.commsStatus}`, "instructor");
     } else if (action === "conflicting_report") {
        this.generateMessage("Team Alpha Lead", "TEAM_ALPHA", "URGENT: Hostile movement sighted near Sector 2 tree-line!", "CONFLICTING_REPORT", true, "grp1");
@@ -576,17 +678,26 @@ export class LocalSimulationEngine {
     } else if (action === "move_unit") {
       const unit = this.state.trueUnits?.find(u => u.id === payload?.targetUnitId);
       if (unit) {
+        const destination = { x: typeof payload?.x === "number" ? payload.x : unit.x, y: typeof payload?.y === "number" ? payload.y : unit.y };
+        const error = movementError(unit, destination, this.state.trainingArea);
+        if (error) {
+          this.logEvent("Movement Not Applied", `${unit.name}: ${error}`, "system");
+          this.notify();
+          return;
+        }
         this.movements.delete(unit.id);
         delete unit.destination;
-        if (typeof payload?.x === "number") unit.x = payload.x;
-        if (typeof payload?.y === "number") unit.y = payload.y;
+        delete unit.patrolRoute;
+        delete unit.patrolIndex;
+        unit.x = destination.x;
+        unit.y = destination.y;
         unit.sector = payload?.sector as string || unit.sector;
         this.logEvent("Instructor Inject: Move Unit", `Moved ${unit.name} to ${unit.sector}`, "instructor");
       }
     } else if (action === "change_status") {
       const unit = this.state.trueUnits?.find(u => u.id === payload?.targetUnitId);
       if (unit) {
-        unit.status = payload?.status as any || unit.status;
+        unit.status = payload?.status as TacticalUnit["status"] || unit.status;
         this.logEvent("Instructor Inject: Change Status", `Status of ${unit.name} set to ${unit.status}`, "instructor");
       }
     } else if (action === "detect_contact" || action === "activate_contact") {
@@ -607,7 +718,7 @@ export class LocalSimulationEngine {
         id: "instructor-decision-" + Date.now(),
         title: String(payload?.title || "Commander Decision Required"),
         situation: String(payload?.prompt || "Situation requires immediate decision."),
-        availableActions: (payload?.options as any) || [],
+        availableActions: (payload?.options as DecisionPoint["availableActions"]) || [],
         status: "active",
         timestamp: Date.now(),
         simulationSecond: this.state.elapsedSeconds

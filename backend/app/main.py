@@ -2,25 +2,29 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.routes import aar, decisions, exercises, scenarios
-from app.scenario_engine.scheduler import scheduler
-from app.service import get_session, is_instructor
-from app.websocket.handlers import handle_websocket_message
-from app.websocket.manager import ws_manager
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from app.config import settings
+from app.persistence import persistence
+from app.routes import aar, decisions, exercises, scenarios
+from app.scenario_engine.scheduler import scheduler
+from app.service import get_session, is_instructor
+from app.websocket.handlers import handle_websocket_message
+from app.websocket.manager import ws_manager
+
 
 @asynccontextmanager
 async def lifespan(app):
+    await persistence.start()
     await scheduler.start()
     try:
         yield
     finally:
         await scheduler.stop()
+        await persistence.stop()
 
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
@@ -33,6 +37,14 @@ app.add_middleware(
 )
 for module in (scenarios, exercises, decisions, aar):
     app.include_router(module.router, prefix=settings.API_PREFIX)
+
+
+@app.middleware("http")
+async def restore_archived_exercise(request, call_next):
+    parts = request.url.path.split("/")
+    if len(parts) >= 4 and parts[1:3] == ["api", "exercises"] and parts[3].startswith("ex-"):
+        await persistence.load_archived(parts[3])
+    return await call_next(request)
 
 
 @app.exception_handler(ValueError)
@@ -49,7 +61,8 @@ async def root():
         "system": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "status": "OPERATIONAL",
-        "storage": "in-memory",
+        "storage": "firestore" if persistence.store else "in-memory",
+        "persistenceStatus": persistence.state,
     }
 
 
@@ -60,7 +73,8 @@ async def health():
     return {
         "status": "ok",
         "service": "tactical-sim",
-        "storage": "in-memory",
+        "storage": "firestore" if persistence.store else "in-memory",
+        "persistenceStatus": persistence.state,
         "rooms": len(engine_manager.exercises),
     }
 
@@ -88,6 +102,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise_id: str):
     await websocket.accept()
     joined = False
     try:
+        await persistence.load_archived(exercise_id)
         session = get_session(exercise_id)
         join = await asyncio.wait_for(receive_packet(websocket), timeout=10)
         if not isinstance(join, dict) or join.get("type") != "JOIN":

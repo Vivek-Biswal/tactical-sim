@@ -1,3 +1,6 @@
+from fastapi import APIRouter, Header
+
+from app.persistence import persistence
 from app.scenario_engine.engine import engine_manager
 from app.schemas.models import (
     ExerciseControl,
@@ -9,7 +12,6 @@ from app.schemas.models import (
 )
 from app.service import control, get_session, is_instructor, require_instructor
 from app.websocket.manager import ws_manager
-from fastapi import APIRouter, Header
 
 router = APIRouter(prefix="/exercises", tags=["Exercises"])
 
@@ -33,6 +35,7 @@ async def create_exercise(data: ExerciseCreate):
         training_area=data.trainingArea.model_dump(),
     )
     session.speed_multiplier = data.speedMultiplier
+    await persistence.save(session, force=True)
     return {**state(session), "instructorKey": session.instructor_key}
 
 
@@ -41,6 +44,7 @@ async def start_exercise(data: ExerciseCreate):
     result = await create_exercise(data)
     session = get_session(result["exerciseId"])
     session.start()
+    await persistence.save(session, force=True)
     return {**state(session), "instructorKey": session.instructor_key}
 
 

@@ -4,6 +4,10 @@ Immersive decision-making training for degraded communication environments. Prob
 
 Kakul's cream-and-olive Next.js application is the only frontend. The interactive React/TypeScript/SVG tactical map lives under src/simulation. The FastAPI backend now runs shared exercises with an authoritative clock, degraded radio, frozen map snapshots, team movement and actual decision/AAR records.
 
+## India training maps
+
+Open `/maps` (Training Maps in the sidebar) to explore ten terrain types with Army, Air Force, Navy and joint profiles. Choose an Indian training area, start dynamic patrols, and switch between SVG and Cesium views. Shared rooms use the same configuration at `/training`. See [training maps guide](docs/training-maps.md) for controls, location references and simulation limits.
+
 ## Run locally
 
 ```powershell
@@ -33,7 +37,7 @@ Open http://localhost:3100/training. Create an instructor room and connect. Shar
 
 API documentation: http://localhost:8000/docs. See [backend runbook and contracts](docs/backend.md) for LAN configuration, API/WebSocket examples, data boundaries and prototype limits.
 
-Rooms are in server memory: export before restarting or resetting. Participant roles are self-selected; instructor controls require a separate room key.
+Rooms use server memory by default. Optional Firestore checkpoints preserve exercise state and AAR records across restarts; see [Firestore setup](docs/firestore.md). Participant roles are self-selected; instructor controls require a separate room key.
 
 The independent browser-only demo remains at /commander/simulation/ex-001 and works without a backend. Its local state resets on refresh. Other pre-existing dashboard sample cards remain presentation data.
 
@@ -58,9 +62,7 @@ Firebase provides identity (Google Sign-In) and lightweight user records (Firest
 
 ### 3. Enable Firestore (optional but recommended)
 
-1. In the Firebase Console → **Firestore Database** → **Create database**.
-2. Start in **test mode** for development (add security rules before going to production).
-3. User records are written to `users/{uid}` on every successful sign-in.
+The project's default Standard database is provisioned in Mumbai (`asia-south1`) with restricted rules. User records are written to `users/{uid}` on successful sign-in. See [Firestore setup](docs/firestore.md) for rules, backend credentials and persistence configuration.
 
 ### 4. Configure environment variables
 

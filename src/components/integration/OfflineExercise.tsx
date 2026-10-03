@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { LocalSimulationEngine } from "@/simulation/lib/simulation";
 import { ExerciseState } from "@/simulation/types/exercise";
 import { ExerciseMap } from "@/simulation/components/tactical/ExerciseMap";
+import { TrainingAreaFields } from "@/simulation/components/geographic/TrainingAreaFields";
+import { DEFAULT_TRAINING_AREA } from "@/simulation/lib/geography";
 import { PanelCard } from "@/components/ui/PanelCard";
 
 export function useOfflineExercise(id: string) {
@@ -29,15 +31,21 @@ export function OfflineMap({ state, engine }: { state: ExerciseState; engine: Lo
   }
   return <div className="flex h-full min-h-[360px] flex-col gap-2">
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[9px] font-black uppercase tracking-widest text-[#687066]">Offline training · 2 min · {state.status}</span>
+      <span className="text-[9px] font-black uppercase tracking-widest text-[#687066]">Offline training · {Math.round(state.totalDuration / 60)} min · {state.status}</span>
       <button className={button} disabled={state.status === "completed"} onClick={() => state.status === "pending" ? engine.start() : state.status === "running" ? engine.pause() : engine.resume()}>{state.status === "running" ? "Pause" : state.status === "paused" ? "Resume" : "Start"}</button>
       <button className={button} onClick={() => engine.reset()}>Reset</button>
       <button className={button} onClick={() => engine.end()} disabled={state.status === "completed"}>End</button>
       <button className={button} onClick={exportReport}>Export AAR</button>
-      <label className="text-[10px] font-bold text-[#687066]">Map feed <select aria-label="Map feed" value={state.mapStatus} onChange={event => engine.applyInstructorInject(event.target.value === "current" ? "restore_map" : event.target.value === "outdated" ? "outdate_map" : "unavailable_map")} className="ml-1 rounded border border-[#D9D8CE] bg-white p-2"><option value="current">CURRENT</option><option value="outdated">OUTDATED</option><option value="unavailable">UNAVAILABLE</option></select></label>
+      <label className="text-[10px] font-bold text-[#687066]">Speed <select aria-label="Simulation speed" value={state.speedMultiplier} onChange={event => engine.setSpeed(Number(event.target.value))} className="ml-1 rounded border border-[#D9D8CE] bg-white p-2"><option value={0.5}>Slow · 0.5×</option><option value={1}>Normal · 1×</option><option value={2}>Fast · 2×</option><option value={4}>Very fast · 4×</option></select></label>
+      <label className="text-[10px] font-bold text-[#687066]">Map feed <select aria-label="Map feed" value={state.mapStatus} onChange={event => engine.applyInstructorInject(event.target.value === "current" ? "restore_map" : event.target.value === "outdated" ? "outdate_map" : "unavailable_map")} className="ml-1 rounded border border-[#D9D8CE] bg-white p-2"><option value="current">Current · live positions</option><option value="outdated">Outdated · last known positions</option><option value="unavailable">Unavailable · no positions</option></select></label>
     </div>
+    <details open={state.status === "pending"} className="flex-shrink-0 rounded-lg border border-[#D9D8CE] bg-white px-3 py-2 text-xs text-[#344438]">
+      <summary className="cursor-pointer font-bold">Training area and forces · {state.trainingArea?.name ?? DEFAULT_TRAINING_AREA.name}</summary>
+      <div className="mt-2 max-h-[240px] overflow-y-auto"><TrainingAreaFields value={state.trainingArea ?? DEFAULT_TRAINING_AREA} onChange={area => engine.setTrainingArea(area)} disabled={state.status !== "pending"} /></div>
+      {state.status !== "pending" && <p className="mt-2 text-[10px] text-[#687066]">Reset the exercise to choose another area or force.</p>}
+    </details>
     <ExerciseMap trainingArea={state.trainingArea} eventLog={state.eventLog} mapSnapshotSecond={state.mapSnapshotSecond} units={state.units} activityMarkers={state.activityMarkers} mapStatus={state.mapStatus} mapLastUpdated={state.mapLastUpdated} movementEnabled={state.status === "running"} onUnitMove={(id, point) => { engine.moveTeam(id, point); }} className="flex-1 min-h-0" />
-    <p className="text-[10px] text-[#687066]">Fictional local grid. Select a unit for details. Select a friendly team to set a destination. Movement and degradation follow the simulation clock.</p>
+    <p className="text-[10px] text-[#687066]">Start to watch simulated patrols. Select a friendly unit, then choose a destination to take control. Ground teams stay on land; boats stay on water; aircraft fly over both. Pause freezes the exercise. Both map views use the same positions.</p>
   </div>;
 }
 

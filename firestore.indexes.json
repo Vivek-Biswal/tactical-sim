@@ -1,0 +1,25 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "chunks",
+      "fieldPath": "data",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "decisions",
+      "fieldPath": "informationSnapshot",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "content",
+      "indexes": []
+    }
+  ]
+}

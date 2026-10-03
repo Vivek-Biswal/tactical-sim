@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.scenario_engine.training import TRAINING_AREAS
+
 
 class Command(BaseModel):
     model_config = ConfigDict(
@@ -19,6 +21,38 @@ class TrainingArea(Command):
     longitude: float = Field(default=76.70, ge=-180, le=180)
     widthMeters: float = Field(default=8000, ge=200, le=20000)
     heightMeters: float = Field(default=6000, ge=200, le=20000)
+    forceProfile: Literal["army", "air_force", "navy", "joint"] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def canonical_preset(cls, value):
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        preset = TRAINING_AREAS.get(value.get("id", "nilgiri-demo"))
+        if preset:
+            for field in ("latitude", "longitude", "widthMeters", "heightMeters"):
+                if field in value and value[field] != preset[field]:
+                    raise ValueError(
+                        "A preset's location and dimensions cannot be changed"
+                    )
+                value[field] = preset[field]
+            value["name"] = preset["name"]
+            force = value.get("forceProfile")
+            # Old saved/default rooms retain their existing two-team exercise.
+            if force is None and preset["id"] != "nilgiri-demo":
+                force = value["forceProfile"] = preset["defaultForce"]
+            if force is not None and force not in preset["supportedForces"]:
+                raise ValueError(
+                    "This training area does not support the selected force"
+                )
+        elif value.get("forceProfile") is not None:
+            raise ValueError("Choose an India training preset for force training")
+        return value
+
+    def model_dump(self, **kwargs):
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump(**kwargs)
 
     @model_validator(mode="after")
     def check_bounds(self):

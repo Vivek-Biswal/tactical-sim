@@ -18,30 +18,23 @@ import { resolveAuthError } from "@/lib/auth";
 async function upsertFirestoreUser(user: User): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    const { getFirestore, doc, setDoc, serverTimestamp } = await import(
+    const { getFirestore, doc, runTransaction, serverTimestamp } = await import(
       "firebase/firestore"
     );
     const { getApp } = await import("firebase/app");
     const db = getFirestore(getApp());
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
+    const reference = doc(db, "users", user.uid);
+    await runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(reference);
+      transaction.set(reference, {
         uid: user.uid,
         displayName: user.displayName ?? null,
         email: user.email ?? null,
         photoURL: user.photoURL ?? null,
+        createdAt: existing.exists() ? existing.data().createdAt : serverTimestamp(),
         lastLoginAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-    // Set createdAt only on first write (merge won't overwrite existing value)
-    await setDoc(
-      doc(db, "users", user.uid),
-      {
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+      });
+    });
   } catch (err) {
     // Firestore failure should never break the auth flow
     console.warn("[TACTICAL-SIM] Firestore user record update failed:", err);

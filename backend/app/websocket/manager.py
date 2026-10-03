@@ -1,7 +1,8 @@
 import asyncio
 
-from app.config import settings
 from fastapi import WebSocketDisconnect
+
+from app.config import settings
 
 
 class ConnectionManager:
@@ -37,7 +38,10 @@ class ConnectionManager:
         async with connection["lock"]:
             await asyncio.wait_for(connection["ws"].send_json(data), timeout=2)
 
-    async def broadcast_state(self, session):
+    async def broadcast_state(self, session, persist=True):
+        if persist:
+            from app.persistence import persistence
+            await persistence.save(session, force=True)
         room = session.exercise_id
         async with self.room_locks.setdefault(room, asyncio.Lock()):
             events = session.event_log[session.broadcast_cursor :]

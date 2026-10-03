@@ -1,8 +1,9 @@
 import type { TacticalMapProps } from "../components/tactical/TacticalMap";
 import type { TrainingArea } from "../types/geography";
 import type { SimulationEventLog } from "../types/exercise";
-import { DEFAULT_ZONES } from "./mapGeometry";
 import { gridToGeo, inTrainingGrid } from "./geography";
+import { trainingZones } from "./mapZones";
+import { domainOf } from "./training";
 
 export interface GeographicOverlayInput extends TacticalMapProps {
   trainingArea: TrainingArea;
@@ -15,11 +16,12 @@ export function geographicOverlay(input: GeographicOverlayInput) {
   return {
     units: unavailable ? [] : input.units.filter(inTrainingGrid).map(unit => ({
       ...unit, ...gridToGeo(unit, area),
-      airborne: /uav|drone|aircraft|helicopter/i.test(unit.type),
+      domain: domainOf(unit),
+      airborne: domainOf(unit) === "air",
       destinationGeo: unit.destination && inTrainingGrid(unit.destination) ? gridToGeo(unit.destination, area) : undefined,
     })),
     activities: unavailable ? [] : (input.activityMarkers ?? []).filter(inTrainingGrid).map(marker => ({ ...marker, ...gridToGeo(marker, area) })),
-    zones: (input.zones ?? DEFAULT_ZONES).map(zone => ({ ...zone, coordinates: zone.points.map(p => gridToGeo(p, area)) })),
+    zones: (input.zones ?? trainingZones(area)).map(zone => ({ ...zone, coordinates: zone.points.map(p => gridToGeo(p, area)) })),
     // Positionless events belong in the timeline, never at an invented map location.
     events: unavailable ? [] : (input.eventLog ?? []).filter(event => {
       if (mapStatus === "outdated" && (input.mapSnapshotSecond === undefined || event.second > input.mapSnapshotSecond)) return false;

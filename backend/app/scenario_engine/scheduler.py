@@ -3,6 +3,7 @@ import logging
 import time
 
 from app.config import settings
+from app.persistence import persistence
 from app.scenario_engine.engine import engine_manager
 from app.websocket.manager import ws_manager
 
@@ -32,7 +33,8 @@ class SimulationScheduler:
                 try:
                     if session.status == "running":
                         session.advance_wallclock()
-                        await ws_manager.broadcast_state(session)
+                        await ws_manager.broadcast_state(session, persist=False)
+                        await persistence.save(session, force=session.status == "completed")
                     if (
                         session.status in ("pending", "completed")
                         and time.time() - (session.completed_at or session.created_at)
