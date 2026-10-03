@@ -1,9 +1,10 @@
 from copy import deepcopy
 
+from fastapi import APIRouter
+
 from app.schemas.models import TraineeDecisionInput
 from app.service import get_session
 from app.websocket.manager import ws_manager
-from fastapi import APIRouter
 
 router = APIRouter(prefix="/exercises/{exercise_id}", tags=["Decisions"])
 

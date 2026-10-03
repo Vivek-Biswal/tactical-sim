@@ -8,6 +8,7 @@ import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import { TeamMapPlaceholder } from "@/components/simulation/TeamMapPlaceholder";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 import {
   Clock,
   Radio,
@@ -181,6 +182,7 @@ export default function TeamPage() {
 
   return (
     <AppShell pageTitle="TEAM OPERATIONS" role="team">
+      <TrainingExampleNotice />
 
       {/* ═══════════════════════════════════════════
           PAGE HEADER — custom (not PageHeader component)
@@ -358,7 +360,7 @@ export default function TeamPage() {
             </div>
 
             <p className="text-sm font-bold text-[#263229] leading-relaxed mb-5 border-l-2 border-[#B69B63] pl-3">
-              "Maintain position at Grid 24A and report any confirmed movement."
+              &ldquo;Maintain position at Grid 24A and report any confirmed movement.&rdquo;
             </p>
 
             {!orderAcknowledged && (

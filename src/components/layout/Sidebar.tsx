@@ -4,7 +4,6 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Shield,
   LayoutDashboard,
   GraduationCap,
   BookOpen,
@@ -30,7 +29,7 @@ const navItems: NavItem[] = [
   { label: "Scenarios",        href: "/instructor/scenarios", icon: BookOpen, category: "ROLES"  },
   { label: "Commander",        href: "/commander",  icon: Map,             category: "ROLES"     },
   { label: "Team",             href: "/team",       icon: Users,           category: "ROLES"     },
-  { label: "After Action",     href: "#",           icon: ClipboardList,   category: "REPORTS"   },
+  { label: "After Action",     href: "/training#server-exercises", icon: ClipboardList, category: "REPORTS" },
 ];
 
 interface SidebarProps {
@@ -122,7 +121,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#4A7A3A] animate-pulse" />
-              <span className="text-[10px] font-bold tracking-widest text-[#9AAA88]">SYSTEM ONLINE</span>
+              <span className="text-[10px] font-bold tracking-widest text-[#9AAA88]">TRAINING WORKSPACE</span>
             </div>
             <div className="text-[9px] font-bold tracking-[0.2em] text-[#71805A]">ENVIRONMENT: TRAINING</div>
           </div>

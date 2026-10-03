@@ -97,11 +97,14 @@ Also set:
 
 ## Verification
 
+See the [Varun backend completion checklist](docs/varun-backend-completion.md) and [HTTP/WebSocket API contracts](docs/backend-api.md) for implementation evidence and verified integration behavior.
+
 ```powershell
 ./scripts/test-backend.ps1
 node scripts/verify-offline-simulation.cjs
 node scripts/verify-tactical-map.cjs
 node scripts/verify-geographic-map.cjs
+node scripts/verify-shared-protocol.cjs
 npx tsc --noEmit
 npm run build
 ```

@@ -2,8 +2,9 @@ import csv
 import io
 import json
 
-from app.service import get_session, is_instructor
 from fastapi import APIRouter, Header, HTTPException, Query, Response
+
+from app.service import get_session, is_instructor
 
 router = APIRouter(prefix="/exercises/{exercise_id}", tags=["AAR"])
 

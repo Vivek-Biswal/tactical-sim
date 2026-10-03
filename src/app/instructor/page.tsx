@@ -4,13 +4,15 @@ import { PanelCard } from "@/components/ui/PanelCard";
 import { StatusBadge, StatusVariant } from "@/components/ui/StatusBadge";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
-import { Plus, List, Target, Users, Calendar, Activity, ChevronRight, FileText, BarChart } from "lucide-react";
+import { Plus, List, Target, Users, Calendar, Activity, BarChart } from "lucide-react";
 import Link from "next/link";
 import React from "react";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 
 export default function InstructorPage() {
   return (
     <AppShell pageTitle="INSTRUCTOR CONTROL" role="instructor">
+      <TrainingExampleNotice />
       <PageHeader
         label="INSTRUCTOR CONTROL"
         title="Training Dashboard"
@@ -20,7 +22,7 @@ export default function InstructorPage() {
             <Link href="/instructor/scenarios">
               <SecondaryButton icon={<List size={16} />}>VIEW SCENARIOS</SecondaryButton>
             </Link>
-            <Link href="/instructor/scenarios/create">
+            <Link href="/training">
               <PrimaryButton icon={<Plus size={16} />}>CREATE EXERCISE</PrimaryButton>
             </Link>
           </div>

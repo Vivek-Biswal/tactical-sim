@@ -9,6 +9,7 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { StatusBadge, StatusVariant } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 import {
   ShieldAlert,
   Radio,
@@ -20,7 +21,6 @@ import {
   List,
   FileText,
   PlayCircle,
-  AlertTriangle,
   Info
 } from "lucide-react";
 
@@ -45,6 +45,7 @@ export default function CommanderPage() {
 
   return (
     <AppShell pageTitle="COMMANDER OPERATIONS" role="commander">
+      <TrainingExampleNotice />
       <PageHeader
         label="COMMANDER OPERATIONS"
         title="COMMANDER OPERATIONS"

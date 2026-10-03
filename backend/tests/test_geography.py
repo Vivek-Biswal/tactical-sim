@@ -1,13 +1,14 @@
 import unittest
 from copy import deepcopy
 
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
 from app.main import app
 from app.scenario_engine.engine import ExerciseSession, engine_manager
 from app.schemas.models import ExerciseControl, TrainingArea
 from app.service import control
 from app.websocket.manager import ws_manager
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 AREA = {
     "id": "custom",

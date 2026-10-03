@@ -1,6 +1,6 @@
 # Shared simulation backend
 
-FastAPI owns each exercise's clock, events, communication queues, movement, map snapshots and decision records. The root Next.js app connects at /training. This is a local in-memory prototype, with a two-minute demonstration and a 15-minute training mode. No real military data, weapon effects, combat scoring or tactical correctness claims are included.
+FastAPI owns each shared exercise's clock, events, communication queues, movement, map snapshots and decision records. The root Next.js app connects at /training. The prototype uses memory by default, with optional Firestore checkpoints, a two-minute demonstration and a 15-minute training mode. No real military data, weapon effects, combat scoring or tactical correctness claims are included. See the [integration API reference](backend-api.md) for request/response examples and the [Varun completion checklist](varun-backend-completion.md) for work-file coverage.
 
 ## Run on Windows
 
@@ -21,7 +21,7 @@ Run these in two terminals:
 npm run dev -- --port 3100
 ```
 
-Open http://localhost:3100/training. Create a room, choose a callsign and connect as Instructor. Press Start. Open the participant link in other browser tabs or browsers, choose Commander / Team Alpha / Team Bravo, and connect. Participant links never include the instructor key. The key is saved under a versioned localStorage entry in the room creator's browser; enter it in the instructor join form when using a different browser. Instructor commands do not depend on the frontend's Firebase/demo login.
+Open http://localhost:3100/training. Create a room, choose a callsign and connect as Instructor. Press Start. Open the participant link in other browser tabs or browsers, choose Commander or a field team, and connect. Participant links never include the instructor key. The key is saved under a versioned localStorage entry in the room creator's browser; enter it in the instructor join form when using a different browser. Instructor commands do not depend on the frontend's Firebase/demo login.
 
 The backend binds only to 127.0.0.1 by default. For a LAN demonstration, run ./scripts/start-backend.ps1 -BindAddress 0.0.0.0 and configure the following before starting/building the frontend:
 
@@ -63,12 +63,13 @@ Swagger: http://localhost:8000/docs. All endpoints below have /api prefix.
 
 | Endpoint | Purpose |
 | --- | --- |
-| GET /health | Health and in-memory room count |
+| GET /health | Health, storage mode, checkpoint status and loaded room count |
 | GET /scenarios, /scenarios/{id} | Built-in scenario catalog |
+| GET /scenarios/training-areas | Shared India training-area catalog |
 | POST /exercises | Create a pending room; returns instructorKey once |
 | POST /exercises/start | Create and immediately start |
 | GET /exercises, /exercises/{id} | Room list / trainee state |
-| POST /exercises/{id}/control | start, pause, resume, end, reset, set_speed |
+| POST /exercises/{id}/control | start, pause, resume, end, reset, set_speed, set_training_area |
 | POST /exercises/{id}/inject | Instructor action plus payload |
 | POST /exercises/{id}/event | Uppercase scenario event type plus payload |
 | POST /exercises/{id}/messages | Participant radio message |
@@ -109,7 +110,9 @@ The frontend disables controls when disconnected, marks its retained map as outd
 
 Participant identity/roles are self-selected in this prototype; this is not production identity authorization. REST participant endpoints support local integration without participant tokens. Instructor keys protect privileged operations independently. Firebase auth is not connected to backend permissions.
 
-Records are not durable: restarting the server clears rooms. Completed/pending unconnected rooms expire after 24 hours. Limits: 128 rooms, 32 connected participants per room, 1000 messages, 200 decisions and 5000 log records for participant/inject commands. Export before reset, expiry or restart. End remains available at the record limit.
+In memory mode, restarting the server clears rooms. Optional Firestore checkpoints restore saved rooms and AAR data; explicit Firestore configuration requires backend credentials, and a running restored room resumes as paused. Checkpoint acknowledgement is asynchronous, so abrupt termination can lose changes after the last successful write. See [Firestore setup](firestore.md). Run one backend worker and one service instance in either mode.
+
+Completed/pending unconnected rooms leave memory after 24 hours; this does not delete Firestore records. Limits: 128 loaded rooms, 32 connected participants per room, 1000 messages, 200 decisions and 5000 log records for participant/inject commands. Export before reset, expiry or restart. End remains available at the record limit.
 
 ```powershell
 ./scripts/test-backend.ps1

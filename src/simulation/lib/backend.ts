@@ -18,7 +18,7 @@ export function socketUrl(id: string): string {
 export async function backendRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${apiBase()}${path}`, {
     ...options, headers: { "Content-Type": "application/json", ...options.headers },
-    signal: options.signal ?? AbortSignal.timeout(8000),
+    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));

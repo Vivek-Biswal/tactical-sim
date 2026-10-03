@@ -16,7 +16,11 @@ async def handle_websocket_message(connection, exercise_id, data):
     if not isinstance(kind, str):
         raise TypeError("Command type must be a string")
     kind = kind.upper()
+    if kind == "SEND_MESSAGE":
+        kind = "RADIO_MESSAGE"
     payload = data.get("payload", {})
+    if not isinstance(payload, dict):
+        raise TypeError("Command payload must be a JSON object")
     request_id = data.get("requestId")
     if not isinstance(request_id, str) or not 1 <= len(request_id) <= 80:
         raise ValueError("requestId is required (1–80 characters)")

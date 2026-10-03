@@ -42,7 +42,11 @@ for module in (scenarios, exercises, decisions, aar):
 @app.middleware("http")
 async def restore_archived_exercise(request, call_next):
     parts = request.url.path.split("/")
-    if len(parts) >= 4 and parts[1:3] == ["api", "exercises"] and parts[3].startswith("ex-"):
+    if (
+        len(parts) >= 4
+        and parts[1:3] == ["api", "exercises"]
+        and parts[3].startswith("ex-")
+    ):
         await persistence.load_archived(parts[3])
     return await call_next(request)
 
@@ -105,7 +109,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise_id: str):
         await persistence.load_archived(exercise_id)
         session = get_session(exercise_id)
         join = await asyncio.wait_for(receive_packet(websocket), timeout=10)
-        if not isinstance(join, dict) or join.get("type") != "JOIN":
+        if not isinstance(join, dict) or join.get("type") not in (
+            "JOIN",
+            "JOIN_EXERCISE",
+        ):
             raise ValueError("Send JOIN before commands")
         role, name = join.get("role", "COMMANDER"), join.get("name", "User")
         if role not in (

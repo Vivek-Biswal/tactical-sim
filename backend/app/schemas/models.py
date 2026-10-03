@@ -3,7 +3,14 @@
 import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.scenario_engine.training import TRAINING_AREAS
 
@@ -114,7 +121,11 @@ class ScenarioEventInput(Command):
 
 
 class RadioInput(Command):
-    content: str = Field(min_length=1, max_length=2000)
+    content: str = Field(
+        min_length=1,
+        max_length=2000,
+        validation_alias=AliasChoices("content", "message"),
+    )
     sender: str = Field(default="Commander", min_length=1, max_length=80)
     senderRole: Literal["COMMANDER", "TEAM_ALPHA", "TEAM_BRAVO", "TEAM_CHARLIE"] = (
         "COMMANDER"
@@ -127,6 +138,11 @@ class TraineeDecisionInput(Command):
     confidence: Literal["low", "medium", "high"] = "medium"
     traineeId: str = Field(default="Commander", min_length=1, max_length=80)
     selectedActionId: str = Field(default="", max_length=80)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
 
 
 class MovementInput(Command):
@@ -141,7 +157,9 @@ class EventPayload(Command):
         default="Sector 4 activity reported. Reliability: medium. Verify independently.",
         min_length=1,
         max_length=2000,
+        validation_alias=AliasChoices("content", "message"),
     )
+    reliability: Literal["low", "medium", "high", "unverified"] = "medium"
     reportA: str = Field(
         default="Alpha scout reports activity along the western ridge.",
         min_length=1,
@@ -153,3 +171,8 @@ class EventPayload(Command):
         max_length=2000,
     )
     sender: str = Field(default="Instructor relay", min_length=1, max_length=80)
+
+    @field_validator("reliability", mode="before")
+    @classmethod
+    def normalize_reliability(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value

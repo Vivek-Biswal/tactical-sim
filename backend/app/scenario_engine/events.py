@@ -54,6 +54,18 @@ TITLES = {
     "EXERCISE_ENDED": "Exercise ended",
     "TEAM_MOVEMENT": "Team movement ordered",
 }
+PAYLOADS = {
+    "RADIO_DELAY": {"delay": 10},
+    "CONFLICTING_REPORT": {
+        "reportA": "Alpha scout reports activity along the western ridge.",
+        "reportB": "Intelligence relay reports activity in the eastern sector; western ridge unconfirmed.",
+        "reliability": "unverified",
+    },
+    "NEW_INTELLIGENCE": {
+        "content": "Sector 4 activity reported. Reliability: medium. Verify independently.",
+        "reliability": "medium",
+    },
+}
 
 
 def get_operation_silent_link(is_demo: bool = True) -> dict:
@@ -73,7 +85,7 @@ def get_operation_silent_link(is_demo: bool = True) -> dict:
                 "triggerTime": second * duration / 120,
                 "title": TITLES[kind],
                 "description": TITLES[kind],
-                "payload": {},
+                "payload": deepcopy(PAYLOADS.get(kind, {})),
             }
             for second, kind in TIMELINE
         ],

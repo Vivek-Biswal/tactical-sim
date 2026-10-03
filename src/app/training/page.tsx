@@ -63,8 +63,8 @@ export default function TrainingLobby() {
         </form>
       </PanelCard>
     </div>
-    <div className="mt-6"><PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Server exercises</span>}>
-      {loading ? <p className="text-sm text-[#687066]">Connecting to simulation server…</p> : rooms.length ? <ul className="divide-y divide-[#D9D8CE]">{rooms.map(room => <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={room.exerciseId}><div><p className="font-black text-[#344438]">{room.teamName}</p><p className="mt-1 text-xs font-mono text-[#687066]">{room.exerciseId} · {room.status.toUpperCase()}</p></div><Link className={button} href={`/training/${room.exerciseId}`}>Join / review</Link></li>)}</ul> : <p className="text-sm text-[#687066]">No rooms available. Create a new exercise to begin.</p>}
+    <div className="mt-6" id="server-exercises"><PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Server exercises and reviews</span>}>
+      {loading ? <p className="text-sm text-[#687066]">Connecting to simulation server…</p> : rooms.length ? <ul className="divide-y divide-[#D9D8CE]">{rooms.map(room => <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={room.exerciseId}><div><p className="font-black text-[#344438]">{room.teamName}</p><p className="mt-1 text-xs font-mono text-[#687066]">{room.exerciseId} · {room.status.toUpperCase()}</p></div><div className="flex gap-2"><Link className={button} href={`/training/${room.exerciseId}`}>Join exercise</Link>{room.status === "completed" && <Link className={button} href={`/aar/${room.exerciseId}`}>Review AAR</Link>}</div></li>)}</ul> : <p className="text-sm text-[#687066]">No rooms available. Create a new exercise to begin.</p>}
     </PanelCard></div>
     <Link className="mt-6 inline-block text-xs font-bold text-[#556B3F] underline" href="/maps">Explore maps in a single-browser practice exercise</Link>
   </AppShell>;

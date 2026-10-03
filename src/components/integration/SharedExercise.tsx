@@ -46,8 +46,9 @@ export function SharedExercise({ id, initialRole }: { id: string; initialRole?: 
 }
 
 function SharedSession({ id, participant, leave }: { id: string; participant: Participant; leave: () => void }) {
-  const { state, connection, error, command } = useSharedExercise(id, participant.role, participant.name, participant.key);
+  const { state, connection, error, notice, command } = useSharedExercise(id, participant.role, participant.name, participant.key);
   const [feedback, setFeedback] = useState("");
+  const [feedbackKind, setFeedbackKind] = useState<"info" | "warning" | "error">("info");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [decision, setDecision] = useState("");
@@ -61,9 +62,9 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
   const instructor = participant.role === "INSTRUCTOR";
   const live = connection === "live";
   async function run(task: () => Promise<unknown>) {
-    setBusy(true); setFeedback("");
+    setBusy(true); setFeedback(""); setFeedbackKind("info");
     try { await task(); return true; }
-    catch (failure) { setFeedback(failure instanceof Error ? failure.message : "Request failed"); return false; }
+    catch (failure) { setFeedbackKind("error"); setFeedback(failure instanceof Error ? failure.message : "Request failed"); return false; }
     finally { setBusy(false); }
   }
   const disabled = !live || busy;
@@ -75,7 +76,9 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
       <div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B69B63]">{participant.role.replaceAll("_", " ")} · {participant.name}</p><h1 className="mt-1 text-xl font-black">{state?.scenarioName || "Connecting to simulation"}</h1><p className="mt-2 text-xs text-[#D8C7A5]">{connection.toUpperCase()} · {state?.status.toUpperCase() || "AWAITING STATE"} · {state?.connectedTrainees?.length || 0} connected</p></div>
       <div className="flex items-center gap-4"><p className="font-mono text-2xl font-black">{state?.formattedTime || "00:00"}<span className="ml-2 text-xs text-[#B69B63]">/ {state?.totalDuration || "—"}s</span></p><button className={button} onClick={leave}>Disconnect</button></div>
     </div>
-    {(error || feedback) && <div role="alert" className="rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-3 text-sm text-[#A94A3F]">{feedback || error}</div>}
+    {error && <div role="alert" className="rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-3 text-sm text-[#A94A3F]">{error}</div>}
+    {feedback && <div role={feedbackKind === "error" ? "alert" : "status"} className={`rounded-lg border p-3 text-sm ${feedbackKind === "error" ? "border-[#A94A3F] bg-[#FCECE8] text-[#A94A3F]" : feedbackKind === "warning" ? "border-[#D8C7A5] bg-[#FDF3E3] text-[#8A5C2A]" : "border-[#D9D8CE] bg-[#EEF3E8] text-[#344438]"}`}>{feedback}</div>}
+    {notice && live && <div role="status" aria-live="polite" className="rounded-lg border border-[#D9D8CE] bg-[#F7F5EE] p-3 text-sm text-[#344438]"><p className="font-black">Latest exercise update · {Math.floor(notice.timestamp / 60).toString().padStart(2, "0")}:{Math.floor(notice.timestamp % 60).toString().padStart(2, "0")} · {notice.title}</p><p className="mt-1 text-xs text-[#687066]">{notice.description}</p></div>}
     {!state && <p className="text-sm text-[#687066]">Waiting for the server. If the room has expired or the server restarted, create a new exercise from the rooms page.</p>}
     {state && <>
       {instructor && <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Instructor control</span>}>
@@ -132,7 +135,7 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
               event.preventDefault();
               const accepted = await run(async () => {
                 const result = await command("RADIO_MESSAGE", { content: message });
-                if (result.deliveryStatus === "DROPPED") setFeedback("Transmission dropped: radio net offline. This attempt is logged for AAR.");
+                if (result.deliveryStatus === "DROPPED") { setFeedbackKind("warning"); setFeedback("Transmission dropped: radio net offline. This attempt is logged for AAR."); }
                 else if (result.deliveryStatus === "DELAYED") setFeedback("Transmission queued. It will arrive after the simulation delay.");
               });
               if (accepted) setMessage("");
@@ -150,12 +153,13 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
         <p className="text-xs text-[#687066]">{state.status === "completed" ? "Final report available for all participants." : "Full review is available to the instructor during training, and to participants after the exercise ends."}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button className={button} disabled={disabled || (!instructor && state.status !== "completed")} onClick={() => void run(async () => { setReview(await backendRequest<Review>(`/exercises/${id}/aar`, { headers: participant.key ? { "X-Instructor-Key": participant.key } : {} })); })}>View AAR</button>
+          <Link className={`${button} inline-block`} href={`/aar/${encodeURIComponent(id)}`}>Open full review page</Link>
           {(["json", "csv"] as const).map(format => <button className={button} key={format} disabled={disabled || (!instructor && state.status !== "completed")} onClick={() => void run(() => downloadAAR(id, participant.key, format))}>Export {format.toUpperCase()}</button>)}
           <button className={button} onClick={() => void run(async () => { await navigator.clipboard.writeText(`${window.location.origin}/training/${id}`); setFeedback("Participant link copied. This link has no instructor key."); })}>Copy participant link</button>
         </div>
         {review && <div className="mt-5 space-y-4 text-sm text-[#344438]"><p className="font-black">{review.isFinal ? "Final AAR" : "Instructor preview"} · {review.stats.messagesDelivered} delivered · {review.stats.messagesDropped} dropped · {review.stats.decisionsCount} decisions</p>{review.analyticalFindings.map(f => <p key={f}>{f}</p>)}{review.decisions.map(d => <details key={d.id} className="rounded-lg border border-[#D9D8CE] p-3"><summary className="cursor-pointer font-bold">{d.simulationTime} · {d.traineeId} · {d.selectedActionLabel}</summary><p className="mt-3">{d.rationale}</p><p className="mt-3">Comms {d.communicationState} · Map {d.mapStatus}</p><p className="mt-3 font-bold">Available at decision</p><ul className="mt-2 list-disc pl-5">{d.availableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul><p className="mt-3 font-bold">Unavailable at decision</p><ul className="mt-2 list-disc pl-5">{d.unavailableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul></details>)}</div>}
       </PanelCard>
-      <p className="text-[10px] text-[#687066]">Local training prototype: participant roles are self-selected, instructor controls require a room key, and records are held in server memory. This is separate from the browser-only offline demonstration.</p>
+      <p className="text-[10px] text-[#687066]">Training prototype: participant roles are self-selected and instructor controls require a room key. Storage depends on backend configuration. Export the review before resetting the room. Single-browser practice runs separately.</p>
     </>}
   </div>;
 }

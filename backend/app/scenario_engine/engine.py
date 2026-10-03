@@ -65,10 +65,12 @@ class ExerciseSession:
                     event["payload"] = {
                         "reportA": "Alpha observer reports activity near observation point 1.",
                         "reportB": "The relay reports activity near observation point 2. The first report is unconfirmed.",
+                        "reliability": "unverified",
                     }
                 elif event["type"] == "NEW_INTELLIGENCE":
                     event["payload"] = {
-                        "content": "A new observation is reported. Its identity is not verified; compare the available reports."
+                        "content": "A new observation is reported. Its identity is not verified; compare the available reports.",
+                        "reliability": "medium",
                     }
         self.team_name, self.is_demo = team_name, is_demo
         self.instructor_key = instructor_key or secrets.token_urlsafe(32)
@@ -252,6 +254,8 @@ class ExerciseSession:
             "revision": self.revision,
         }
         result["teams"] = deepcopy(result["units"])
+        # Retain the map integration name from the original work-file contract.
+        result["activities"] = deepcopy(result["activityMarkers"])
         if instructor:
             result["trueUnits"] = deepcopy(self.units)
         return result
@@ -541,7 +545,12 @@ class ExerciseSession:
                 )
         elif kind == "NEW_INTELLIGENCE":
             # Separate intelligence relay: radio blackout does not magically restore the radio.
-            self.receive_report("Intelligence relay", "INTELLIGENCE", values.content)
+            self.receive_report(
+                "Intelligence relay",
+                "INTELLIGENCE",
+                values.content,
+                reliability=values.reliability,
+            )
             position = {"x": 560, "y": 180}
             if is_dynamic_area(self.training_area):
                 position = self.scenario["initialUnits"][0]["patrolRoute"][3]
@@ -550,7 +559,7 @@ class ExerciseSession:
                     "id": uid(),
                     "label": "New observation — please verify"
                     if is_dynamic_area(self.training_area)
-                    else "Sector 4 activity — medium reliability",
+                    else f"Sector 4 activity — {values.reliability} reliability",
                     **position,
                     "type": "contact_warning",
                     "status": "unverified",
@@ -615,17 +624,25 @@ class ExerciseSession:
         self.require_capacity()
         if action == "custom_message":
             values = EventPayload.model_validate(payload or {})
-            self.receive_report(values.sender, "INSTRUCTOR", values.content)
+            self.receive_report(
+                values.sender,
+                "INSTRUCTOR",
+                values.content,
+                reliability=values.reliability,
+            )
         else:
             self.execute_event(INJECT_TYPES[action], payload, "instructor")
 
-    def receive_report(self, sender, role, content, conflict=None):
+    def receive_report(
+        self, sender, role, content, conflict=None, reliability="medium"
+    ):
         message = self.make_message(sender, role, content)
         message.update(
             isConflicting=bool(conflict),
             conflictGroupId=conflict,
             messageType="CONFLICTING_REPORT" if conflict else "INTEL_REPORT",
             channel="INTELLIGENCE_RELAY",
+            reliability="unverified" if conflict else reliability,
         )
         self.messages.append(message)
         self.deliver_message(len(self.messages) - 1)
@@ -695,7 +712,7 @@ class ExerciseSession:
                 "timestamp": self.elapsed_seconds,
                 "reliability": "unverified"
                 if message.get("isConflicting")
-                else "medium",
+                else message.get("reliability", "medium"),
                 "conflictGroupId": message.get("conflictGroupId"),
             }
         )

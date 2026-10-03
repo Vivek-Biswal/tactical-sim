@@ -3,6 +3,7 @@
 import React, { use, useState } from "react";
 import Link from "next/link";
 import { SharedExercise } from "@/components/integration/SharedExercise";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 import { AppShell } from "@/components/layout/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PanelCard } from "@/components/ui/PanelCard";
@@ -70,6 +71,7 @@ function SampleExerciseDetail({ params }: PageProps) {
 
   return (
     <AppShell pageTitle="EXERCISE CONTROL" role="instructor">
+      <TrainingExampleNotice />
       
       {/* ── TOP NAVIGATION ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">

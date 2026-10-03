@@ -2,10 +2,11 @@ import json
 import time
 import unittest
 
+from fastapi.testclient import TestClient
+
 from app.main import app
 from app.scenario_engine.engine import engine_manager
 from app.websocket.manager import ws_manager
-from fastapi.testclient import TestClient
 
 
 def packet(ws, kind, predicate=lambda p: True):
@@ -266,3 +267,112 @@ class ApiTests(unittest.TestCase):
             self.client.get(f"/api/exercises/{self.id}").json()["elapsedSeconds"],
             before,
         )
+
+    def test_work_file_socket_aliases_and_delivered_message(self):
+        self.post("control", {"action": "start"})
+        with self.client.websocket_connect(f"/ws/exercises/{self.id}") as commander:
+            commander.send_json(
+                {"type": "JOIN_EXERCISE", "role": "COMMANDER", "name": "Lead"}
+            )
+            packet(commander, "JOINED")
+            packet(commander, "STATE_UPDATE")
+            with self.client.websocket_connect(f"/ws/exercises/{self.id}") as team:
+                team.send_json({"type": "JOIN", "role": "TEAM_ALPHA", "name": "Alpha"})
+                packet(team, "JOINED")
+                packet(team, "STATE_UPDATE")
+                team.send_json(
+                    {
+                        "type": "SEND_MESSAGE",
+                        "requestId": "work-file-message",
+                        "payload": {"message": "Checkpoint reached"},
+                    }
+                )
+                ack = packet(team, "ACK")
+                self.assertEqual(ack["result"]["deliveryStatus"], "DELIVERED")
+                event = packet(
+                    commander,
+                    "SCENARIO_EVENT",
+                    lambda p: p["event"] == "MESSAGE_DELIVERED",
+                )
+                for field in ("title", "description", "source"):
+                    self.assertIsInstance(event[field], str)
+                delivered = packet(commander, "TEAM_MESSAGE")
+                self.assertEqual(delivered["messageId"], ack["result"]["messageId"])
+                self.assertEqual(delivered["sender"], "Alpha")
+                self.assertEqual(delivered["senderRole"], "TEAM_ALPHA")
+                self.assertEqual(delivered["message"], "Checkpoint reached")
+                self.assertEqual(delivered["channel"], "TACTICAL_RADIO")
+                self.assertIsInstance(delivered["timestamp"], (int, float))
+                state = packet(commander, "STATE_UPDATE")
+                self.assertEqual(
+                    state["state"]["messages"][0]["id"], delivered["messageId"]
+                )
+
+    def test_socket_never_broadcasts_hidden_uav_positions(self):
+        for mode in ("outdate_map", "unavailable_map"):
+            with self.subTest(mode=mode):
+                self.post("control", {"action": "reset"})
+                self.post("control", {"action": "start"})
+                self.post("control", {"action": "pause"})
+                self.post("inject", {"action": mode})
+                with self.client.websocket_connect(
+                    f"/ws/exercises/{self.id}"
+                ) as commander:
+                    commander.send_json(
+                        {"type": "JOIN", "role": "COMMANDER", "name": "Lead"}
+                    )
+                    packet(commander, "JOINED")
+                    packet(commander, "STATE_UPDATE")
+                    response = self.post("inject", {"action": "deploy_uav"})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn("unit-uav", json.dumps(response.json()["trueUnits"]))
+                    packets = []
+                    while True:
+                        value = commander.receive_json()
+                        packets.append(value)
+                        if (
+                            value["type"] == "STATE_UPDATE"
+                            and value["state"]["revision"]
+                            >= response.json()["revision"]
+                        ):
+                            break
+                    self.assertNotIn("unit-uav", json.dumps(packets))
+                    self.assertFalse(
+                        any(p.get("event") == "UAV_DEPLOYED" for p in packets)
+                    )
+
+    def test_queued_and_dropped_bodies_are_not_message_envelopes(self):
+        self.post("control", {"action": "start"})
+        self.post("inject", {"action": "delay_radio", "payload": {"delay": 10}})
+        with self.client.websocket_connect(f"/ws/exercises/{self.id}") as commander:
+            commander.send_json({"type": "JOIN", "role": "COMMANDER", "name": "Lead"})
+            packet(commander, "JOINED")
+            packet(commander, "STATE_UPDATE")
+            response = self.client.post(
+                f"/api/exercises/{self.id}/messages",
+                json={"message": "QUEUED_PRIVATE_BODY"},
+            )
+            self.assertEqual(response.status_code, 200)
+            packets = []
+            while True:
+                value = commander.receive_json()
+                packets.append(value)
+                if (
+                    value["type"] == "STATE_UPDATE"
+                    and value["state"]["pendingMessages"]
+                ):
+                    break
+            self.assertNotIn("QUEUED_PRIVATE_BODY", json.dumps(packets))
+            self.assertFalse(any(p["type"] == "TEAM_MESSAGE" for p in packets))
+            response = self.post("inject", {"action": "drop_radio"})
+            packets = []
+            while True:
+                value = commander.receive_json()
+                packets.append(value)
+                if (
+                    value["type"] == "STATE_UPDATE"
+                    and value["state"]["commsStatus"] == "offline"
+                ):
+                    break
+            self.assertNotIn("QUEUED_PRIVATE_BODY", json.dumps(packets))
+            self.assertFalse(any(p["type"] == "TEAM_MESSAGE" for p in packets))

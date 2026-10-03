@@ -9,6 +9,7 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { StatusBadge, StatusVariant } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 import {
   Activity,
   Users,
@@ -39,6 +40,7 @@ export default function DashboardPage() {
 
   return (
     <AppShell pageTitle="TACTICAL DASHBOARD" role="commander">
+      <TrainingExampleNotice />
       <PageHeader
         label="OVERVIEW"
         title="TACTICAL DASHBOARD"

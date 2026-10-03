@@ -41,11 +41,15 @@ class ConnectionManager:
     async def broadcast_state(self, session, persist=True):
         if persist:
             from app.persistence import persistence
+
             await persistence.save(session, force=True)
         room = session.exercise_id
         async with self.room_locks.setdefault(room, asyncio.Lock()):
             events = session.event_log[session.broadcast_cursor :]
             session.broadcast_cursor = len(session.event_log)
+            delivered = {
+                m["id"]: m for m in session.messages if m["status"] == "delivered"
+            }
 
             async def update(connection):
                 try:
@@ -56,7 +60,8 @@ class ConnectionManager:
                         if (
                             instructor
                             or session.map_status == "current"
-                            or event["type"] not in ("TEAM_MOVEMENT", "TEAM_ARRIVED")
+                            or event["type"]
+                            not in ("TEAM_MOVEMENT", "TEAM_ARRIVED", "UAV_DEPLOYED")
                         ):
                             await self.send(
                                 connection,
@@ -64,9 +69,29 @@ class ConnectionManager:
                                     "type": "SCENARIO_EVENT",
                                     "event": event["type"],
                                     "timestamp": event["second"],
+                                    "title": event["title"],
+                                    "description": event["description"],
+                                    "source": event.get("source", "system"),
                                     "payload": event["payload"],
                                 },
                             )
+                        if event["type"] == "MESSAGE_DELIVERED":
+                            message = delivered.get(event["payload"].get("messageId"))
+                            if message:
+                                await self.send(
+                                    connection,
+                                    {
+                                        "type": "TEAM_MESSAGE",
+                                        "messageId": message["id"],
+                                        "sender": message["sender"],
+                                        "senderRole": message["senderRole"],
+                                        "message": message["content"],
+                                        "timestamp": message["timestampDelivered"],
+                                        "channel": message.get(
+                                            "channel", "TACTICAL_RADIO"
+                                        ),
+                                    },
+                                )
                     await self.send(
                         connection, {"type": "STATE_UPDATE", "state": state}
                     )
