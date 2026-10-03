@@ -5,16 +5,16 @@
  * hardcoded secrets. Service-account credentials must never appear here.
  *
  * When environment variables are absent the file exports null values so that
- * the application can fall back to the demo (name-only) login flow gracefully.
+ * the login page can show an honest unavailable state.
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId:         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim(),
+  authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim(),
+  projectId:         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim(),
   storageBucket:     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
@@ -24,17 +24,22 @@ const firebaseConfig = {
  * True when the minimum required Firebase environment variables are present.
  * When false the application runs in demo mode (no Firebase).
  */
-export const isFirebaseConfigured =
-  !!firebaseConfig.apiKey && !!firebaseConfig.projectId &&
-  !!firebaseConfig.authDomain && !!firebaseConfig.appId;
+// Firebase Auth needs the API key and auth domain; projectId is used by the
+// app's optional Firestore profile sync. appId is not a prerequisite for Auth.
+export const missingFirebaseConfiguration = [
+  !firebaseConfig.apiKey && "NEXT_PUBLIC_FIREBASE_API_KEY",
+  !firebaseConfig.authDomain && "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  !firebaseConfig.projectId && "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+].filter((name): name is string => typeof name === "string");
 
-// Log a developer-facing warning when credentials are missing so the cause is
-// immediately obvious rather than surfacing as an obscure undefined error later.
+export const isFirebaseConfigured = missingFirebaseConfiguration.length === 0;
+
 if (!isFirebaseConfigured && typeof window !== "undefined") {
+  // Report names only. Never print credential values.
   console.warn(
-    "[TACTICAL-SIM] Firebase environment variables are not set.\n" +
-    "Copy .env.local.example to .env.local and fill in your Firebase project values.\n" +
-    "The application will run in demo mode (no authentication required)."
+    "[TACTICAL-SIM] Firebase sign-in is unavailable. Missing frontend configuration:",
+    missingFirebaseConfiguration.join(", "),
+    "Set these variables in the Vercel Production environment and rebuild, or in root .env.local and restart locally."
   );
 }
 
