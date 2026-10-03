@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Shield, 
@@ -8,17 +8,13 @@ import {
   Map, 
   Terminal, 
   Users, 
-  CheckCircle2, 
-  X,
   Activity,
   Crosshair,
-  Radio,
   FileText,
   Clock,
   Target,
   AlertTriangle
 } from 'lucide-react';
-import { useAuth } from '@/components/auth/AuthProvider';
 
 const TopoGridBackground = () => (
   <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden bg-[#F2F0E7]">
@@ -57,15 +53,7 @@ const TopoGridBackground = () => (
 );
 
 export default function LandingPage() {
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const router = useRouter();
-  const { setRole } = useAuth();
-
-  const handleRoleLogin = (path: string, roleKey: string) => {
-    setIsLoginModalOpen(false);
-    setRole(roleKey);
-    router.push(path);
-  };
 
   return (
     <div className="min-h-screen bg-[#F2F0E7] text-[#252B25] font-sans selection:bg-[#4B5320] selection:text-[#FFFFFF]">
@@ -96,7 +84,7 @@ export default function LandingPage() {
                 <div className="w-2 h-2 rounded-full bg-[#5C7A29] shadow-[0_0_8px_#5C7A29] animate-pulse"></div>
               </div>
               <button 
-                onClick={() => setIsLoginModalOpen(true)}
+                onClick={() => router.push("/login")}
                 className="bg-[#4B5320] hover:bg-[#596340] text-[#FFFFFF] px-6 py-2.5 rounded font-bold tracking-wide transition-colors border border-[#6B7650]"
               >
                 LOGIN
@@ -130,7 +118,7 @@ export default function LandingPage() {
               
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
                 <button 
-                  onClick={() => setIsLoginModalOpen(true)}
+                  onClick={() => router.push("/login")}
                   className="bg-[#26352A] hover:bg-[#344638] text-[#FFFFFF] px-8 py-4 rounded text-sm font-black tracking-widest transition-colors shadow-lg border border-[#4B5320] flex items-center justify-center gap-3"
                 >
                   <Terminal className="w-5 h-5 text-[#A88B52]" />
@@ -254,7 +242,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-black text-[#252B25] mb-3 uppercase tracking-wide">Realistic Scenarios</h3>
               <p className="text-[#687064] leading-relaxed font-medium">
-                Common Operating Pictures (COP) aren't always real-time. Learn to recognize frozen GPS tracks and navigate contradictory scouting reports in field conditions.
+                Common Operating Pictures (COP) aren&apos;t always real-time. Learn to recognize frozen GPS tracks and navigate contradictory scouting reports in field conditions.
               </p>
             </div>
             
@@ -304,77 +292,6 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* Demo Login Modal */}
-      {isLoginModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-[#252B25]/80 backdrop-blur-sm"
-            onClick={() => setIsLoginModalOpen(false)}
-          ></div>
-          <div className="relative bg-[#F2F0E7] w-full max-w-md rounded shadow-2xl border-4 border-[#344638] overflow-hidden flex flex-col">
-            
-            <div className="relative z-10 flex justify-between items-center p-6 border-b border-[#D8C9A7] bg-[#FFFFFF]">
-              <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-[#4B5320]" />
-                <h3 className="text-lg font-black text-[#26352A] uppercase tracking-wide">Secure Access</h3>
-              </div>
-              <button 
-                onClick={() => setIsLoginModalOpen(false)}
-                className="text-[#687064] hover:text-[#A94438] transition-colors bg-[#F2F0E7] p-1.5 rounded border border-[#D8C9A7]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="relative z-10 p-6">
-              <div className="bg-[#D8C9A7]/30 border-l-4 border-[#A88B52] p-3 mb-6 text-sm text-[#252B25] font-medium">
-                Select your operational role to enter the training environment. No secure credential required for demo mode.
-              </div>
-              
-              <div className="space-y-3">
-                <button 
-                  onClick={() => handleRoleLogin('/instructor', 'instructor')}
-                  className="w-full flex items-center gap-4 p-4 rounded border border-[#C3B091] bg-[#FFFFFF] hover:border-[#4B5320] hover:bg-[#EBE8D8] transition-all group text-left shadow-sm"
-                >
-                  <div className="bg-[#F2F0E7] border border-[#C3B091] group-hover:bg-[#4B5320] group-hover:border-[#344638] group-hover:text-[#FFFFFF] text-[#26352A] w-10 h-10 rounded flex items-center justify-center transition-colors">
-                    <Terminal className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-black text-[#252B25] uppercase tracking-wide">Instructor</div>
-                    <div className="text-sm text-[#687064] font-medium">Control scenarios & inject disruption</div>
-                  </div>
-                </button>
-                
-                <button 
-                  onClick={() => handleRoleLogin('/commander', 'commander')}
-                  className="w-full flex items-center gap-4 p-4 rounded border border-[#C3B091] bg-[#FFFFFF] hover:border-[#4B5320] hover:bg-[#EBE8D8] transition-all group text-left shadow-sm"
-                >
-                  <div className="bg-[#F2F0E7] border border-[#C3B091] group-hover:bg-[#4B5320] group-hover:border-[#344638] group-hover:text-[#FFFFFF] text-[#26352A] w-10 h-10 rounded flex items-center justify-center transition-colors">
-                    <Map className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-black text-[#252B25] uppercase tracking-wide">Commander</div>
-                    <div className="text-sm text-[#687064] font-medium">Access C2 dashboard & tactical map</div>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => handleRoleLogin('/team', 'team')}
-                  className="w-full flex items-center gap-4 p-4 rounded border border-[#C3B091] bg-[#FFFFFF] hover:border-[#4B5320] hover:bg-[#EBE8D8] transition-all group text-left shadow-sm"
-                >
-                  <div className="bg-[#F2F0E7] border border-[#C3B091] group-hover:bg-[#4B5320] group-hover:border-[#344638] group-hover:text-[#FFFFFF] text-[#26352A] w-10 h-10 rounded flex items-center justify-center transition-colors">
-                    <Radio className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-black text-[#252B25] uppercase tracking-wide">Team Member</div>
-                    <div className="text-sm text-[#687064] font-medium">Submit SITREPs & navigate terrain</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
