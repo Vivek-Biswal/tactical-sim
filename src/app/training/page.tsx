@@ -18,17 +18,28 @@ export default function TrainingLobby() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [teamName, setTeamName] = useState("Task Force Alpha");
   const [demo, setDemo] = useState(true);
   const [trainingArea, setTrainingArea] = useState<TrainingArea>({ ...DEFAULT_TRAINING_AREA });
   const [roomId, setRoomId] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    backendRequest<RoomSummary[]>("/exercises", { signal: controller.signal }).then(setRooms).catch(error => {
+    const startupHint = setTimeout(() => { if (!controller.signal.aborted) setWaiting(true); }, 5000);
+    backendRequest<RoomSummary[]>("/exercises", { signal: controller.signal }, 90000).then(rooms => {
+      if (!controller.signal.aborted) { setRooms(rooms); setConnected(true); setError(""); }
+    }).catch(error => {
       if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Unable to load exercises");
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, []);
+    }).finally(() => { clearTimeout(startupHint); if (!controller.signal.aborted) { setLoading(false); setWaiting(false); } });
+    return () => { clearTimeout(startupHint); controller.abort(); };
+  }, [connectionAttempt]);
+
+  function retryConnection() {
+    setError(""); setConnected(false); setLoading(true); setWaiting(false);
+    setConnectionAttempt(value => value + 1);
+  }
 
   async function create() {
     const areaError = trainingAreaError(trainingArea);
@@ -44,14 +55,15 @@ export default function TrainingLobby() {
 
   return <AppShell pageTitle="SHARED EXERCISES" role="instructor">
     <div className="mb-8"><p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#71805A]">LIVE TRAINING</p><h1 className="mt-2 text-3xl font-black text-[#263229]">One exercise. Shared decisions.</h1><p className="mt-3 max-w-2xl text-sm text-[#687066]">Choose an Indian terrain and training force, then invite a commander and teams using the same room ID. Switch between 2D and 3D while the server controls movement, radio failures and map updates.</p></div>
-    {error && <div role="alert" className="mb-6 rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-4 text-sm text-[#A94A3F]">{error}<p className="mt-2">Start the FastAPI server on port 8000, or configure the backend URL for this frontend.</p></div>}
+    {loading && <div role="status" className="mb-6 rounded-lg border border-[#D9D8CE] bg-[#EEF3E8] p-4 text-sm text-[#344438]">{waiting ? "Still connecting. The simulation server may be starting; the first connection can take about a minute." : "Connecting to simulation server…"}<p className="mt-2 text-xs text-[#687066]">You can choose your training area while we connect.</p></div>}
+    {error && <div role="alert" className="mb-6 rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-4 text-sm text-[#A94A3F]">{error}<div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" className={button} disabled={loading || busy} onClick={retryConnection}>Retry connection</button><Link className="text-xs font-bold underline" href="/maps">Use local map practice</Link></div></div>}
     <div className="grid gap-6 lg:grid-cols-2">
       <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Create instructor room</span>}>
         <form className="space-y-4" onSubmit={event => { event.preventDefault(); void create(); }}>
           <label className="block text-xs font-bold text-[#344438]">Team name<input className={field + " mt-2"} value={teamName} onChange={event => setTeamName(event.target.value)} required maxLength={80} /></label>
           <label className="block text-xs font-bold text-[#344438]">Exercise length<select className={field + " mt-2"} value={demo ? "demo" : "standard"} onChange={event => setDemo(event.target.value === "demo")}><option value="demo">2-minute demonstration</option><option value="standard">15-minute training</option></select></label>
           <TrainingAreaFields value={trainingArea} onChange={setTrainingArea} disabled={busy} />
-          <button className={button} disabled={busy || !teamName.trim() || Boolean(trainingAreaError(trainingArea))}>{busy ? "Creating…" : "Create room"}</button>
+          <button className={button} disabled={busy || !connected || loading || !teamName.trim() || Boolean(trainingAreaError(trainingArea))}>{busy ? "Creating…" : "Create room"}</button>
           <p className="text-xs text-[#687066]">Your instructor key stays in this browser. Export your review after training. Exercise recovery depends on whether the backend has database persistence enabled.</p>
         </form>
       </PanelCard>
@@ -64,7 +76,7 @@ export default function TrainingLobby() {
       </PanelCard>
     </div>
     <div className="mt-6" id="server-exercises"><PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Server exercises and reviews</span>}>
-      {loading ? <p className="text-sm text-[#687066]">Connecting to simulation server…</p> : rooms.length ? <ul className="divide-y divide-[#D9D8CE]">{rooms.map(room => <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={room.exerciseId}><div><p className="font-black text-[#344438]">{room.teamName}</p><p className="mt-1 text-xs font-mono text-[#687066]">{room.exerciseId} · {room.status.toUpperCase()}</p></div><div className="flex gap-2"><Link className={button} href={`/training/${room.exerciseId}`}>Join exercise</Link>{room.status === "completed" && <Link className={button} href={`/aar/${room.exerciseId}`}>Review AAR</Link>}</div></li>)}</ul> : <p className="text-sm text-[#687066]">No rooms available. Create a new exercise to begin.</p>}
+      {loading ? <p className="text-sm text-[#687066]">Loading exercise rooms…</p> : rooms.length ? <ul className="divide-y divide-[#D9D8CE]">{rooms.map(room => <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={room.exerciseId}><div><p className="font-black text-[#344438]">{room.teamName}</p><p className="mt-1 text-xs font-mono text-[#687066]">{room.exerciseId} · {room.status.toUpperCase()}</p></div><div className="flex gap-2"><Link className={button} href={`/training/${room.exerciseId}`}>Join exercise</Link>{room.status === "completed" && <Link className={button} href={`/aar/${room.exerciseId}`}>Review AAR</Link>}</div></li>)}</ul> : <p className="text-sm text-[#687066]">No rooms available. Create a new exercise to begin.</p>}
     </PanelCard></div>
     <Link className="mt-6 inline-block text-xs font-bold text-[#556B3F] underline" href="/maps">Explore maps in a single-browser practice exercise</Link>
   </AppShell>;

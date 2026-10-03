@@ -15,17 +15,33 @@ export function socketUrl(id: string): string {
   return `${base}/ws/exercises/${encodeURIComponent(id)}`;
 }
 
-export async function backendRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${apiBase()}${path}`, {
-    ...options, headers: { "Content-Type": "application/json", ...options.headers },
-    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
-  });
+export async function backendRequest<T>(path: string, options: RequestInit = {}, timeoutMs = 15000): Promise<T> {
+  const base = apiBase();
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      ...options, headers: { "Content-Type": "application/json", ...options.headers }, signal,
+    });
+  } catch (failure) {
+    if (options.signal?.aborted) throw failure;
+    const mutation = !["GET", "HEAD"].includes((options.method || "GET").toUpperCase());
+    if (deadline.aborted) throw new Error(`The simulation server did not respond in time. It may still be starting.${mutation ? " The request may have reached the server; check the room list before submitting again." : " Retry the connection in a moment."}`);
+    if (failure instanceof TypeError) throw new Error("Cannot reach the simulation server. Check your connection or ask the exercise organiser to check the backend URL and allowed website domain.");
+    throw failure;
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const detail = body.detail;
-    throw new Error(typeof detail === "string" ? detail : `Server rejected request (${response.status}). Check the submitted fields.`);
+    throw new Error(typeof detail === "string" ? detail : [502, 503, 504].includes(response.status) ? "The simulation server is temporarily unavailable or still starting. Retry the connection shortly." : `Server rejected request (${response.status}). Check the submitted fields.`);
   }
-  return response.json() as Promise<T>;
+  try { return await response.json() as T; }
+  catch (failure) {
+    if (options.signal?.aborted) throw failure;
+    if (deadline.aborted) throw new Error("The simulation response timed out while loading. Retry the connection.");
+    throw new Error("The backend did not return a valid simulation response. Ask the exercise organiser to check its URL and deployment.");
+  }
 }
 
 export type RoomSummary = Pick<ExerciseState, "exerciseId" | "scenarioName" | "teamName" | "status" | "elapsedSeconds">;

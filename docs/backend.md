@@ -108,6 +108,14 @@ The frontend disables controls when disconnected, marks its retained map as outd
 
 ## Limits and verification
 
+### Slow initial connection
+
+The shared-exercise lobby allows up to 90 seconds for its first room-list request, to accommodate a hosted backend starting after inactivity. After five seconds it displays a startup hint. If the request fails, use **Retry connection**; room creation remains disabled until a successful room-list response. Local practice is available separately.
+
+Other API requests have a 15-second deadline and readable timeout/network/startup errors. Requests that change state are never automatically retried: a timeout can occur after a room was created or a decision accepted, so inspect the server records before submitting again. Leaving the page cancels the connection request without surfacing a failure.
+
+Run `node scripts/verify-backend-connection.cjs` for timeout, cancellation, transient-server errors, invalid responses, and mutation replay safeguards.
+
 Participant identity/roles are self-selected in this prototype; this is not production identity authorization. REST participant endpoints support local integration without participant tokens. Instructor keys protect privileged operations independently. Firebase auth is not connected to backend permissions.
 
 In memory mode, restarting the server clears rooms. Optional Firestore checkpoints restore saved rooms and AAR data; explicit Firestore configuration requires backend credentials, and a running restored room resumes as paused. Checkpoint acknowledgement is asynchronous, so abrupt termination can lose changes after the last successful write. See [Firestore setup](firestore.md). Run one backend worker and one service instance in either mode.
