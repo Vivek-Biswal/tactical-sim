@@ -8,7 +8,7 @@ from copy import deepcopy
 
 from app.config import settings
 from app.scenario_engine.events import TITLES, get_operation_silent_link
-from app.schemas.models import EventPayload, MovementInput
+from app.schemas.models import EventPayload, MovementInput, TrainingArea
 
 INJECT_TYPES = {
     "delay_radio": "RADIO_DELAY",
@@ -20,6 +20,7 @@ INJECT_TYPES = {
     "restore_map": "MAP_RESTORED",
     "new_intelligence": "NEW_INTELLIGENCE",
     "decision_required": "DECISION_REQUIRED",
+    "deploy_uav": "UAV_DEPLOYED",
 }
 
 
@@ -39,8 +40,12 @@ class ExerciseSession:
         team_name="Task Force Alpha",
         is_demo=True,
         instructor_key=None,
+        training_area=None,
     ):
         self.exercise_id = exercise_id
+        self.training_area = TrainingArea.model_validate(
+            training_area or {}
+        ).model_dump()
         self.scenario = scenario or get_operation_silent_link(is_demo)
         self.team_name, self.is_demo = team_name, is_demo
         self.instructor_key = instructor_key or secrets.token_urlsafe(32)
@@ -136,7 +141,7 @@ class ExerciseSession:
             for e in self.event_log
             if instructor
             or (
-                e["type"] not in ("TEAM_MOVEMENT", "TEAM_ARRIVED")
+                e["type"] not in ("TEAM_MOVEMENT", "TEAM_ARRIVED", "UAV_DEPLOYED")
                 or self.map_status == "current"
             )
         ]
@@ -163,6 +168,8 @@ class ExerciseSession:
             "messageLossPercentage": 100 if self.comms_status == "offline" else 0,
             "allowIncompleteReports": False,
             "mapStatus": self.map_status,
+            "trainingArea": deepcopy(self.training_area),
+            "mapSnapshotSecond": self.map_snapshot_second,
             "mapLastUpdated": "Live telemetry"
             if self.map_status == "current"
             else f"Last snapshot {clock(self.map_snapshot_second)} — {int(self.elapsed_seconds - self.map_snapshot_second)}s ago",
@@ -351,6 +358,27 @@ class ExerciseSession:
                     },
                     status="moving",
                 )
+        elif kind == "UAV_DEPLOYED":
+            if any(u["id"] == "unit-uav" for u in self.units):
+                raise ValueError("The simulated UAV is already deployed")
+            self.units.append(
+                {
+                    "id": "unit-uav",
+                    "name": "Training UAV",
+                    "callsign": "UAV-1",
+                    "role": "Simulated aerial observer",
+                    "type": "UAV",
+                    "faction": "friendly",
+                    "x": 400,
+                    "y": 300,
+                    "altitudeMeters": 150,
+                    "status": "operational",
+                    "communicationStatus": "NORMAL",
+                }
+            )
+            # The existing movement loop, clock and stale-feed policy handle this unit.
+            if self.status == "running":
+                self.move_team({"unitId": "unit-uav", "x": 600, "y": 120}, "instructor")
         elif kind == "RADIO_DELAY":
             self.comms_status, self.radio_delay_seconds = "delayed", values.delay
         elif kind == "RADIO_DROPOUT":
@@ -437,6 +465,15 @@ class ExerciseSession:
                 "radioStatus": self.comms_status.upper(),
                 "radioDelay": self.radio_delay_seconds,
                 "mapStatus": self.map_status,
+                **(
+                    {
+                        "unit": deepcopy(
+                            next(u for u in self.units if u["id"] == "unit-uav")
+                        )
+                    }
+                    if kind == "UAV_DEPLOYED"
+                    else {}
+                ),
             },
             source=source,
         )
@@ -592,6 +629,7 @@ class ExerciseSession:
                 if self.map_status == "unavailable"
                 else deepcopy(self.reported_units),
                 "mapSnapshotSecond": self.map_snapshot_second,
+                "trainingArea": deepcopy(self.training_area),
             },
         }
         self.decisions.append(decision)
@@ -614,6 +652,7 @@ class ExerciseSession:
             "completedAt": self.completed_at,
             "durationSeconds": self.elapsed_seconds,
             "isFinal": self.status == "completed",
+            "trainingArea": deepcopy(self.training_area),
             "commsTimeline": deepcopy(self.event_log),
             "fullEventLog": deepcopy(self.event_log),
             "decisions": deepcopy(self.decisions),
@@ -649,7 +688,11 @@ class EngineManager:
         self.exercises = {}
 
     def create_exercise(
-        self, exercise_id=None, is_demo=True, team_name="Task Force Alpha"
+        self,
+        exercise_id=None,
+        is_demo=True,
+        team_name="Task Force Alpha",
+        training_area=None,
     ):
         if len(self.exercises) >= settings.MAX_EXERCISES:
             raise ValueError(
@@ -658,7 +701,12 @@ class EngineManager:
         exercise_id = exercise_id or "ex-" + uuid.uuid4().hex[:12]
         if exercise_id in self.exercises:
             raise ValueError("Exercise already exists")
-        session = ExerciseSession(exercise_id, team_name=team_name, is_demo=is_demo)
+        session = ExerciseSession(
+            exercise_id,
+            team_name=team_name,
+            is_demo=is_demo,
+            training_area=training_area,
+        )
         self.exercises[exercise_id] = session
         return session
 

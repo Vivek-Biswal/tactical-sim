@@ -4,7 +4,10 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { OfflineSituation } from "./OfflineExercise";
-import { TacticalMap } from "@/simulation/components/tactical/TacticalMap";
+import { ExerciseMap } from "@/simulation/components/tactical/ExerciseMap";
+import { TrainingAreaFields } from "@/simulation/components/geographic/TrainingAreaFields";
+import { DEFAULT_TRAINING_AREA, trainingAreaError } from "@/simulation/lib/geography";
+import type { TrainingArea } from "@/simulation/types/geography";
 import { backendRequest, downloadAAR, keyStorage } from "@/simulation/lib/backend";
 import { useSharedExercise, type ParticipantRole } from "@/simulation/lib/useSharedExercise";
 
@@ -14,7 +17,7 @@ const roles: ParticipantRole[] = ["COMMANDER", "TEAM_ALPHA", "TEAM_BRAVO", "TEAM
 const injections = [
   ["delay_radio", "Delay radio"], ["drop_radio", "Radio dropout"], ["restore_radio", "Restore radio"],
   ["conflicting_report", "Conflicting reports"], ["outdate_map", "Stale map"], ["unavailable_map", "Map unavailable"],
-  ["restore_map", "Restore map"], ["new_intelligence", "New intelligence"], ["decision_required", "Decision prompt"],
+  ["deploy_uav", "Deploy simulated UAV"], ["restore_map", "Restore map"], ["new_intelligence", "New intelligence"], ["decision_required", "Decision prompt"],
 ] as const;
 type Participant = { role: ParticipantRole; name: string; key: string };
 type Review = { isFinal: boolean; stats: Record<string, string | number>; analyticalFindings: string[]; decisions: Array<{ id: string; traineeId: string; simulationTime: string; selectedActionLabel: string; rationale: string; communicationState: string; mapStatus: string; availableInformation: string[]; unavailableInformation: string[] }> };
@@ -50,6 +53,7 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
   const [decision, setDecision] = useState("");
   const [actionId, setActionId] = useState("");
   const [rationale, setRationale] = useState("");
+  const [areaDraft, setAreaDraft] = useState<TrainingArea | null>(null);
   const [confidence, setConfidence] = useState("medium");
   const [delay, setDelay] = useState(10);
   const [intel, setIntel] = useState("Sector 4 activity reported. Reliability: medium. Verify independently.");
@@ -80,9 +84,17 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
           <button className={button} disabled={disabled || !running} onClick={() => control("pause")}>Pause</button>
           <button className={button} disabled={disabled || state.status !== "paused"} onClick={() => control("resume")}>Resume</button>
           <button className={button} disabled={disabled || state.status === "completed"} onClick={() => control("end")}>End exercise</button>
-          <button className={button} disabled={disabled || running} onClick={() => { setReview(null); control("reset"); }}>Reset room</button>
+          <button className={button} disabled={disabled || running} onClick={() => { setReview(null); setAreaDraft(null); control("reset"); }}>Reset room</button>
           <label className="text-xs font-bold text-[#687066]">Speed <select className="ml-2 rounded border border-[#D9D8CE] p-2" value={state.speedMultiplier} disabled={disabled || state.status === "completed"} onChange={event => control("set_speed", { speedMultiplier: Number(event.target.value) })}>{[0.25, 0.5, 1, 2, 5, 10].map(value => <option value={value} key={value}>{value}×</option>)}</select></label>
         </div>
+        <details className="mt-4 rounded border border-[#D9D8CE] p-3 text-xs text-[#344438]">
+          <summary className="cursor-pointer font-bold">Training area · {state.trainingArea?.name || DEFAULT_TRAINING_AREA.name}</summary>
+          <div className="mt-3 max-w-xl space-y-3">
+            <TrainingAreaFields value={areaDraft || state.trainingArea || DEFAULT_TRAINING_AREA} onChange={setAreaDraft} disabled={disabled || state.status !== "pending"} />
+            <button className={button} disabled={disabled || state.status !== "pending" || !areaDraft || Boolean(trainingAreaError(areaDraft))} onClick={() => void run(async () => { await command("EXERCISE_CONTROL", { action: "set_training_area", trainingArea: areaDraft }); setAreaDraft(null); })}>Apply training area</button>
+            <p>Choose the area before starting. Reset the exercise to change its geographic placement.</p>
+          </div>
+        </details>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-bold text-[#344438]">Radio delay (simulation seconds)<input className={field} type="number" min={0} max={60} value={delay} onChange={event => setDelay(Number(event.target.value))} /></label>
           <label className="text-xs font-bold text-[#344438]">Intelligence relay report<textarea className={field} maxLength={2000} value={intel} onChange={event => setIntel(event.target.value)} /></label>
@@ -93,9 +105,9 @@ function SharedSession({ id, participant, leave }: { id: string; participant: Pa
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_350px]">
         <div className="space-y-5">
           <div className="h-[570px] min-w-0 rounded-xl border border-[#D9D8CE] bg-white p-3">
-            <TacticalMap units={state.units} activityMarkers={state.activityMarkers} mapStatus={live ? state.mapStatus : state.mapStatus === "unavailable" ? "unavailable" : "outdated"} mapLastUpdated={live ? state.mapLastUpdated : "Server disconnected — last received snapshot"} movementEnabled={!disabled && running} onUnitMove={(unitId, point) => { void run(() => command("TEAM_MOVEMENT", { unitId, x: point.x, y: point.y })); }} className="h-full" />
+            <ExerciseMap trainingArea={state.trainingArea} eventLog={state.eventLog} mapSnapshotSecond={state.mapSnapshotSecond} units={state.units} activityMarkers={state.activityMarkers} mapStatus={live ? state.mapStatus : state.mapStatus === "unavailable" ? "unavailable" : "outdated"} mapLastUpdated={live ? state.mapLastUpdated : "Server disconnected — last received snapshot"} movementEnabled={!disabled && running} onUnitMove={(unitId, point) => { void run(() => command("TEAM_MOVEMENT", { unitId, x: point.x, y: point.y })); }} className="h-full" />
           </div>
-          <p className="text-xs text-[#687066]">Fictional training grid · {state.mapStatus.toUpperCase()} · Movement follows the server clock. Team participants can move their own team. Offline radio drops transmissions; intelligence uses a separate relay.</p>
+          <p className="text-xs text-[#687066]">Simulated training grid · {state.trainingArea?.name || DEFAULT_TRAINING_AREA.name} · {state.mapStatus.toUpperCase()} · Movement follows the server clock. Team participants can move their own team. Offline radio drops transmissions; intelligence uses a separate relay.</p>
           <OfflineSituation state={state} />
           {(participant.role === "COMMANDER") && <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Commander decision</span>}>
             <p className="text-sm font-bold text-[#263229]">{state.activeDecisionPoint?.situation || "Record your assessment and rationale using the available information."}</p>

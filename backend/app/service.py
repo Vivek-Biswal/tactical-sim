@@ -40,11 +40,21 @@ def control(session, command):
             team_name=session.team_name,
             is_demo=session.is_demo,
             instructor_key=session.instructor_key,
+            training_area=session.training_area,
         )
         replacement.speed_multiplier = session.speed_multiplier
         engine_manager.exercises[session.exercise_id] = replacement
         return replacement
-    if command.action == "set_speed":
+    if command.action == "set_training_area":
+        if session.status != "pending":
+            raise ValueError("Choose the training area before starting the exercise")
+        if command.trainingArea is None:
+            raise ValueError("trainingArea is required")
+        session.training_area = command.trainingArea.model_dump()
+        session.log_event(
+            "TRAINING_AREA_CHANGED", payload={"trainingArea": session.training_area}
+        )
+    elif command.action == "set_speed":
         if command.speedMultiplier is None:
             raise ValueError("speedMultiplier is required")
         if session.status == "completed":

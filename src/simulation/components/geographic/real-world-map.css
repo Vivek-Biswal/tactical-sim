@@ -1,0 +1,7 @@
+.real-world-map .cesium-viewer,
+.real-world-map .cesium-viewer-cesiumWidgetContainer,
+.real-world-map .cesium-widget,
+.real-world-map .cesium-widget canvas { width: 100%; height: 100%; }
+.real-world-map .cesium-viewer-bottom { background: rgba(38, 50, 41, .85); padding: 2px 5px; }
+.real-world-map .cesium-credit-text,
+.real-world-map .cesium-credit-text a { color: #fff; }
