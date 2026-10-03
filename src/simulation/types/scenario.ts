@@ -66,6 +66,8 @@ export interface TacticalUnit {
   x: number;
   y: number;
   heading?: number;
+  /** UAV height above terrain; rendering metadata, not a new flight engine. */
+  altitudeMeters?: number;
   destination?: { x: number; y: number };
   status: "operational" | "moving" | "damaged" | "unknown";
   sector?: string;

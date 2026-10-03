@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { LocalSimulationEngine } from "@/simulation/lib/simulation";
 import { ExerciseState } from "@/simulation/types/exercise";
-import { TacticalMap } from "@/simulation/components/tactical/TacticalMap";
+import { ExerciseMap } from "@/simulation/components/tactical/ExerciseMap";
 import { PanelCard } from "@/components/ui/PanelCard";
 
 export function useOfflineExercise(id: string) {
@@ -36,7 +36,7 @@ export function OfflineMap({ state, engine }: { state: ExerciseState; engine: Lo
       <button className={button} onClick={exportReport}>Export AAR</button>
       <label className="text-[10px] font-bold text-[#687066]">Map feed <select aria-label="Map feed" value={state.mapStatus} onChange={event => engine.applyInstructorInject(event.target.value === "current" ? "restore_map" : event.target.value === "outdated" ? "outdate_map" : "unavailable_map")} className="ml-1 rounded border border-[#D9D8CE] bg-white p-2"><option value="current">CURRENT</option><option value="outdated">OUTDATED</option><option value="unavailable">UNAVAILABLE</option></select></label>
     </div>
-    <TacticalMap units={state.units} activityMarkers={state.activityMarkers} mapStatus={state.mapStatus} mapLastUpdated={state.mapLastUpdated} movementEnabled={state.status === "running"} onUnitMove={(id, point) => { engine.moveTeam(id, point); }} className="flex-1 min-h-0" />
+    <ExerciseMap trainingArea={state.trainingArea} eventLog={state.eventLog} mapSnapshotSecond={state.mapSnapshotSecond} units={state.units} activityMarkers={state.activityMarkers} mapStatus={state.mapStatus} mapLastUpdated={state.mapLastUpdated} movementEnabled={state.status === "running"} onUnitMove={(id, point) => { engine.moveTeam(id, point); }} className="flex-1 min-h-0" />
     <p className="text-[10px] text-[#687066]">Fictional local grid. Select a unit for details. Select a friendly team to set a destination. Movement and degradation follow the simulation clock.</p>
   </div>;
 }

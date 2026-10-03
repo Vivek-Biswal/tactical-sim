@@ -1,3 +1,4 @@
+import { DEFAULT_TRAINING_AREA } from "./geography";
 import { ExerciseState, AARReportData, SimulationEventLog } from "../types/exercise";
 import { Scenario, ScenarioEvent, ActivityMarker } from "../types/scenario";
 import { RadioMessage, MessageSenderRole, MessageType, DeliveryStatus } from "../types/communication";
@@ -42,6 +43,7 @@ export class LocalSimulationEngine {
       allowIncompleteReports: false,
       mapStatus: "current",
       mapLastUpdated: "Live Telemetry Active",
+      trainingArea: { ...DEFAULT_TRAINING_AREA },
       units: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       trueUnits: JSON.parse(JSON.stringify(this.scenario.initialUnits)),
       activityMarkers: structuredClone(this.scenario.initialActivityMarkers ?? []),
@@ -84,7 +86,7 @@ export class LocalSimulationEngine {
   }
 
   public getState(): ExerciseState {
-    return JSON.parse(JSON.stringify(this.state));
+    return { ...JSON.parse(JSON.stringify(this.state)), mapSnapshotSecond: this.lastMapUpdateSecond };
   }
 
   public setState(newState: ExerciseState) {
@@ -646,6 +648,7 @@ export class LocalSimulationEngine {
         category: l.category
       })),
       fullEventLog: [...this.state.eventLog],
+      trainingArea: this.state.trainingArea ? { ...this.state.trainingArea } : undefined,
       decisions: this.state.decisions,
       messages: this.state.messages,
       pendingMessages: this.state.pendingMessages,

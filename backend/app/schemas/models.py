@@ -1,8 +1,9 @@
 """Validated commands; public state uses the frontend's field names."""
 
+import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Command(BaseModel):
@@ -11,16 +12,38 @@ class Command(BaseModel):
     )
 
 
+class TrainingArea(Command):
+    id: str = Field(default="nilgiri-demo", min_length=1, max_length=80)
+    name: str = Field(default="Nilgiri hills — demo", min_length=1, max_length=80)
+    latitude: float = Field(default=11.42, ge=-75, le=75)
+    longitude: float = Field(default=76.70, ge=-180, le=180)
+    widthMeters: float = Field(default=8000, ge=200, le=20000)
+    heightMeters: float = Field(default=6000, ge=200, le=20000)
+
+    @model_validator(mode="after")
+    def check_bounds(self):
+        half_width = self.widthMeters / (
+            2 * 111319.49079327358 * math.cos(math.radians(self.latitude))
+        )
+        if abs(self.longitude) + half_width > 180:
+            raise ValueError("Training area must not cross the antimeridian")
+        return self
+
+
 class ExerciseCreate(Command):
     scenarioId: Literal["scenario-op-silent-link", "demo"] = "scenario-op-silent-link"
     teamName: str = Field(default="Task Force Alpha", min_length=1, max_length=80)
     isDemoMode: bool = True
     speedMultiplier: float = Field(default=1, ge=0.25, le=10)
+    trainingArea: TrainingArea = Field(default_factory=TrainingArea)
 
 
 class ExerciseControl(Command):
-    action: Literal["start", "pause", "resume", "end", "reset", "set_speed"]
+    action: Literal[
+        "start", "pause", "resume", "end", "reset", "set_speed", "set_training_area"
+    ]
     speedMultiplier: float | None = Field(default=None, ge=0.25, le=10)
+    trainingArea: TrainingArea | None = None
 
 
 class InstructorInject(Command):
@@ -35,6 +58,7 @@ class InstructorInject(Command):
         "new_intelligence",
         "custom_message",
         "decision_required",
+        "deploy_uav",
     ]
     payload: dict[str, Any] = Field(default_factory=dict)
 

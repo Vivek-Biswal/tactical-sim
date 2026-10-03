@@ -28,7 +28,9 @@ async def list_exercises():
 @router.post("", status_code=201)
 async def create_exercise(data: ExerciseCreate):
     session = engine_manager.create_exercise(
-        is_demo=data.isDemoMode, team_name=data.teamName
+        is_demo=data.isDemoMode,
+        team_name=data.teamName,
+        training_area=data.trainingArea.model_dump(),
     )
     session.speed_multiplier = data.speedMultiplier
     return {**state(session), "instructorKey": session.instructor_key}

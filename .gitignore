@@ -35,3 +35,6 @@ Thumbs.db
 # Local deployment metadata and design references
 .vercel/
 .design-reference/
+
+# Generated Cesium browser distribution (prepared from pinned npm dependency)
+/public/cesium/

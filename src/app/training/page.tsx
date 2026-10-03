@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { PanelCard } from "@/components/ui/PanelCard";
+import { TrainingAreaFields } from "@/simulation/components/geographic/TrainingAreaFields";
+import { DEFAULT_TRAINING_AREA, trainingAreaError } from "@/simulation/lib/geography";
+import type { TrainingArea } from "@/simulation/types/geography";
 import { backendRequest, keyStorage, type RoomCreated, type RoomSummary } from "@/simulation/lib/backend";
 
 const button = "rounded-lg bg-[#556B3F] px-4 py-3 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50";
@@ -17,6 +20,7 @@ export default function TrainingLobby() {
   const [loading, setLoading] = useState(true);
   const [teamName, setTeamName] = useState("Task Force Alpha");
   const [demo, setDemo] = useState(true);
+  const [trainingArea, setTrainingArea] = useState<TrainingArea>({ ...DEFAULT_TRAINING_AREA });
   const [roomId, setRoomId] = useState("");
   useEffect(() => {
     const controller = new AbortController();
@@ -27,9 +31,11 @@ export default function TrainingLobby() {
   }, []);
 
   async function create() {
+    const areaError = trainingAreaError(trainingArea);
+    if (areaError) { setError(areaError); return; }
     setBusy(true); setError("");
     try {
-      const room = await backendRequest<RoomCreated>("/exercises", { method: "POST", body: JSON.stringify({ teamName, isDemoMode: demo }) });
+      const room = await backendRequest<RoomCreated>("/exercises", { method: "POST", body: JSON.stringify({ teamName, isDemoMode: demo, trainingArea }) });
       localStorage.setItem(keyStorage(room.exerciseId), room.instructorKey);
       router.push(`/training/${room.exerciseId}?role=INSTRUCTOR`);
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to create exercise"); }
@@ -44,7 +50,8 @@ export default function TrainingLobby() {
         <form className="space-y-4" onSubmit={event => { event.preventDefault(); void create(); }}>
           <label className="block text-xs font-bold text-[#344438]">Team name<input className={field + " mt-2"} value={teamName} onChange={event => setTeamName(event.target.value)} required maxLength={80} /></label>
           <label className="block text-xs font-bold text-[#344438]">Exercise length<select className={field + " mt-2"} value={demo ? "demo" : "standard"} onChange={event => setDemo(event.target.value === "demo")}><option value="demo">2-minute demonstration</option><option value="standard">15-minute training</option></select></label>
-          <button className={button} disabled={busy || !teamName.trim()}>{busy ? "Creating…" : "Create room"}</button>
+          <TrainingAreaFields value={trainingArea} onChange={setTrainingArea} disabled={busy} />
+          <button className={button} disabled={busy || !teamName.trim() || Boolean(trainingAreaError(trainingArea))}>{busy ? "Creating…" : "Create room"}</button>
           <p className="text-xs text-[#687066]">Your instructor key stays in this browser. Room records stay in server memory until restart or expiry; export your AAR before then.</p>
         </form>
       </PanelCard>

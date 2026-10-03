@@ -1,3 +1,4 @@
+import type { TrainingArea } from "./geography";
 import { CommsStatus, MapStatus, TacticalUnit, ActivityMarker } from "./scenario";
 import { RadioMessage } from "./communication";
 import { DecisionRecord, DecisionPoint } from "./decision";
@@ -37,6 +38,8 @@ export interface ExerciseState {
   allowIncompleteReports: boolean;
   mapStatus: MapStatus;
   mapLastUpdated: string;
+  trainingArea?: TrainingArea;
+  mapSnapshotSecond?: number;
   units: TacticalUnit[];
   trueUnits?: TacticalUnit[];
   activityMarkers: ActivityMarker[];
@@ -51,6 +54,7 @@ export interface ExerciseState {
 }
 
 export interface AARReportData {
+  trainingArea?: TrainingArea;
   exerciseId: string;
   scenarioName: string;
   teamName: string;

@@ -36,6 +36,7 @@ The independent browser-only demo remains at /commander/simulation/ex-001 and wo
 ./scripts/test-backend.ps1
 node scripts/verify-offline-simulation.cjs
 node scripts/verify-tactical-map.cjs
+node scripts/verify-geographic-map.cjs
 npx tsc --noEmit
 npm run build
 ```
@@ -47,3 +48,7 @@ The build fetches the existing Google fonts. Backend tests cover timeline and mo
 Vercel **Root Directory must be blank or .**, not frontend. The former duplicate frontend directory was removed. Root vercel.json builds Next.js.
 
 Deploy FastAPI separately to a service that supports persistent WebSockets. Set NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_WS_BASE_URL for the frontend, and CORS_ORIGINS for the backend. Use HTTPS/WSS in deployment. Run one backend worker while storage is in memory. No deployment or GitHub push is performed by these local changes.
+
+## Real-world 3D map
+
+Shared and offline exercises now offer a 2D / 3D toggle. CesiumJS projects the same reported simulation state onto an instructor-selected geographic area. Add NEXT_PUBLIC_CESIUM_ION_TOKEN to enable Cesium World Terrain and imagery. Without a token the 3D view is clearly labelled as an ellipsoid preview. See [setup and architecture](docs/real-world-map.md).
