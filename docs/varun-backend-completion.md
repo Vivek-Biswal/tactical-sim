@@ -59,7 +59,7 @@ Operation Silent Link runs for 120 simulation seconds in demo mode and 900 secon
 | Ashwin — decision/AAR | Server-recorded rationale/confidence, scenario and real timestamps, radio/map conditions, available/unavailable knowledge and immutable submitted snapshots; real JSON/CSV AAR |
 | Sneha — multiplayer | Per-room join, role/name, live state/events/messages, request ACK/errors, own-team movement restrictions, disconnect/rejoin behavior |
 
-Participant socket identity is self-selected. Instructor keys protect instructor control/truth. REST participant APIs remain prototype integration endpoints. Firebase login is frontend identity and does not grant backend permissions; do not describe this as production membership authorization.
+Exercise REST/socket identity now comes from verified Firebase ID tokens and signed `tacticalRole` account claims. Instructor control/truth requires the Instructor account, creating UID and room key. Team bindings are fixed on first join. REST state/decision reads and participant commands require an existing membership; only room creation and WebSocket JOIN establish memberships. New joins stop after completion, while existing members can reconnect for the complete final debrief. Reset preserves creator and membership bindings. Self-selected roles remain only in explicit local `AUTH_MODE=demo`; the verification dated below preceded this account-authorization change and does not prove its live deployment. See [account roles](account-roles.md) and [the current API contract](backend-api.md).
 
 Additive compatibility keeps existing consumers working: `JOIN_EXERCISE` aliases `JOIN`, `SEND_MESSAGE` aliases `RADIO_MESSAGE`, `message` aliases `content`, `activities` aliases the filtered `activityMarkers`, event records retain both `timestamp` and `second`, and confidence/reliability accept case-insensitive work-file values. Socket `SCENARIO_EVENT` adds title/description/source. Hidden UAV deployments follow the same degraded-map filtering as ground movement, covered by `test_socket_never_broadcasts_hidden_uav_positions`.
 
@@ -74,9 +74,12 @@ Run from the repository root:
 Run the real transport check with a separate backend process bound to the script's default local port 8000:
 
 ```powershell
+$env:AUTH_MODE = "demo"
 ./scripts/start-backend.ps1
 backend/.venv/Scripts/python.exe test_simulation.py
 ```
+
+The transport harness uses the explicit local `AUTH_MODE=demo` backend setting. Firebase authorization needs separate account/token checks; a demo-mode passing test cannot prove production identity enforcement.
 
 For the browser check, open `/training`, create a room, join Instructor and Commander/Team in separate browser contexts, start, inject delay/dropout/conflicts/map degradation, transmit radio, submit a decision, end and open/export the resulting AAR. Confirm every client uses the same room ID. The browser-only `/maps` page is not evidence of backend multiplayer integration.
 

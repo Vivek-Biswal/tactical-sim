@@ -49,7 +49,7 @@ export default function RealWorldMap(props: GeographicOverlayInput) {
   const unavailable = mapStatus === "unavailable";
   const selected = unavailable ? undefined : units.find(u => u.id === selectedId);
   const selectedGeo = selected ? gridToGeo(selected, area) : undefined;
-  const canMove = Boolean(props.onUnitMove && props.movementEnabled && mapStatus === "current" && selected?.faction === "friendly");
+  const canMove = Boolean(props.onUnitMove && props.movementEnabled && mapStatus === "current" && selected?.faction === "friendly" && (props.movableUnitIds === undefined || props.movableUnitIds.includes(selected.id)));
   useEffect(() => { latest.current = props; interaction.current = { selectedId, moveMode }; }, [props, selectedId, moveMode]);
 
   useEffect(() => {
@@ -160,7 +160,7 @@ export default function RealWorldMap(props: GeographicOverlayInput) {
             return;
           }
           const chosen = input.units.find(u => u.id === interaction.current.selectedId);
-          if (!interaction.current.moveMode || !chosen || chosen.faction !== "friendly" || !input.movementEnabled || (input.mapStatus ?? "current") !== "current" || !input.onUnitMove) return;
+          if (!interaction.current.moveMode || !chosen || chosen.faction !== "friendly" || !input.movementEnabled || (input.movableUnitIds !== undefined && !input.movableUnitIds.includes(chosen.id)) || (input.mapStatus ?? "current") !== "current" || !input.onUnitMove) return;
           const ray = current.camera.getPickRay(event.position);
           const hit = ray && current.scene.globe.pick(ray, current.scene);
           if (!hit) return;

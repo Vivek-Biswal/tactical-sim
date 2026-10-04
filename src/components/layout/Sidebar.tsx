@@ -3,6 +3,8 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { canAccessPath } from "@/lib/roles";
 import {
   LayoutDashboard,
   GraduationCap,
@@ -39,12 +41,16 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const { role, isFirebaseConfigured, isLocalPracticeAvailable } = useAuth();
+  const visibleItems = navItems.filter(item => isFirebaseConfigured
+    ? canAccessPath(role, item.href)
+    : isLocalPracticeAvailable && item.category !== "ROLES");
 
   const isActive = (href: string) =>
     href !== "#" && (pathname === href || pathname.startsWith(href + "/"));
 
   /* Group items by category */
-  const categories = Array.from(new Set(navItems.map((n) => n.category)));
+  const categories = Array.from(new Set(visibleItems.map((n) => n.category)));
 
   return (
     <aside
@@ -74,7 +80,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4">
         {categories.map((cat) => {
-          const items = navItems.filter((n) => n.category === cat);
+          const items = visibleItems.filter((n) => n.category === cat);
           return (
             <div key={cat} className="mb-4">
               {!collapsed && (
@@ -121,9 +127,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#4A7A3A] animate-pulse" />
-              <span className="text-[10px] font-bold tracking-widest text-[#9AAA88]">TRAINING WORKSPACE</span>
+              <span className="text-[10px] font-bold tracking-widest text-[#9AAA88]">{isFirebaseConfigured ? "TRAINING WORKSPACE" : "LOCAL PRACTICE"}</span>
             </div>
-            <div className="text-[9px] font-bold tracking-[0.2em] text-[#71805A]">ENVIRONMENT: TRAINING</div>
+            <div className="text-[9px] font-bold tracking-[0.2em] text-[#71805A]">{isFirebaseConfigured ? "ENVIRONMENT: TRAINING" : "NO ACCOUNT SIGN-IN"}</div>
           </div>
         ) : (
           <span className="w-2 h-2 rounded-full bg-[#4A7A3A] animate-pulse" />

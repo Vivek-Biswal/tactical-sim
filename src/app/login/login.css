@@ -78,9 +78,10 @@
 .access-field label{margin-bottom:6px;font-size:11px}
 .access-field input,.access-field select{height:40px}
 .access-password button{height:36px}
-.access-role-field{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.access-role-field label{margin:0}
-.access-role-field select{max-width:180px;height:33px;font-size:12px;background:#f7f7f0}
+.access-role-help{font-size:10px;line-height:1.65;color:#788071;margin:2px 0 0}
+.access-account-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.access-account-actions button{font-size:11px;font-weight:700;border:1px solid #d8ddcf;border-radius:7px;padding:9px;color:#556b3f;cursor:pointer}
+.access-notice a{text-decoration:underline;font-weight:700}
 .access-submit{height:41px}
 .access-privacy{margin-top:16px}
 .access-footer{padding-top:16px}

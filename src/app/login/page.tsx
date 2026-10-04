@@ -5,19 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Shield, LockKeyhole, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { accountDestination, type AccountRole } from "@/lib/roles";
 import "./login.css";
 
 type Mode = "login" | "register" | "reset";
-type TrainingRole = "commander" | "instructor" | "team";
-const destinations: Record<TrainingRole, string> = { commander: "/commander", instructor: "/instructor", team: "/team" };
-
-function takeDestination(): string | null {
+function takeDestination(role: AccountRole): string {
   try {
     const path = sessionStorage.getItem("tactical_sim_redirect");
     sessionStorage.removeItem("tactical_sim_redirect");
-    if (!path || !path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.startsWith("/login")) return null;
-    return path;
-  } catch { return null; }
+    return accountDestination(role, path);
+  } catch { return accountDestination(role, null); }
 }
 
 function GoogleMark() {
@@ -49,24 +46,21 @@ function TrainingIllustration() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, loading, role, setRole, isFirebaseConfigured, loginWithGoogle, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
+  const { user, loading, role, roleError, isFirebaseConfigured, isLocalPracticeAvailable, loginWithGoogle, loginWithEmail, registerWithEmail, resetPassword, refreshAccountAccess, logout } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
-  const [selectedRole, setSelectedRole] = useState<TrainingRole>("commander");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState<"google" | "email" | null>(null);
+  const [busy, setBusy] = useState<"google" | "email" | "account" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    if (!loading && user && !busy) {
-      const destination = takeDestination();
-      const savedRole = role && Object.hasOwn(destinations, role) ? role as TrainingRole : "commander";
-      router.replace(destination ?? destinations[savedRole]);
+    if (!loading && user && role && !roleError && !busy) {
+      router.replace(takeDestination(role));
     }
-  }, [loading, user, busy, role, router]);
+  }, [loading, user, busy, role, roleError, router]);
 
   const changeMode = (next: Mode) => {
     setMode(next); setError(""); setNotice(""); setPassword(""); setConfirmation(""); setShowPassword(false);
@@ -75,7 +69,7 @@ export default function LoginPage() {
   const googleSignIn = async () => {
     if (busy || !isFirebaseConfigured) return;
     setBusy("google"); setError(""); setNotice("");
-    try { await loginWithGoogle(); setRole(selectedRole); }
+    try { await loginWithGoogle(); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in. Please try again."); }
     finally { setBusy(null); }
   };
@@ -93,15 +87,15 @@ export default function LoginPage() {
       } else {
         if (mode === "register") await registerWithEmail(email, password);
         else await loginWithEmail(email, password);
-        setRole(selectedRole); setPassword(""); setConfirmation("");
+        setPassword(""); setConfirmation("");
       }
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to sign in. Please try again."); }
     finally { setBusy(null); }
   };
 
-  const disabled = !!busy || loading || !isFirebaseConfigured;
+  const disabled = !!busy || loading || !isFirebaseConfigured || !!user;
   const title = mode === "register" ? "Create your account." : mode === "reset" ? "Forgot your password?" : "Welcome back.";
-  const subtitle = mode === "register" ? "Join your team. Prepare for the next exercise." : mode === "reset" ? "We’ll send a link to help you get back to training." : "Sign in to your next training exercise.";
+  const subtitle = mode === "register" ? "Create a Commander account and prepare for your next exercise." : mode === "reset" ? "We’ll send a link to help you get back to training." : "Sign in to your assigned training workspace.";
 
   return <div className="access-page">
     <header className="access-header">
@@ -129,17 +123,32 @@ export default function LoginPage() {
               <button type="button" className="access-google" disabled={disabled} onClick={googleSignIn}>{busy === "google" ? <LoaderCircle className="access-spinner" size={19} /> : <GoogleMark />} Continue with Google</button>
               <div className="access-divider"><span />or continue with email<span /></div>
             </> : <button className="access-back" type="button" disabled={!!busy} onClick={() => changeMode("login")}><ArrowLeft size={14} /> Back to sign in</button>}
-            {!isFirebaseConfigured && <div className="access-notice access-notice-warning" role="status"><AlertCircle size={17} /><span>Sign-in is unavailable on this deployment. Please contact your exercise organizer.</span></div>}
+            {!isFirebaseConfigured && <div className="access-notice access-notice-warning" role="status"><AlertCircle size={17} /><span>{isLocalPracticeAvailable ? <>Account sign-in is not configured here. <Link href="/maps">Open local map practice without signing in →</Link></> : "Account sign-in is unavailable on this deployment. Please contact your exercise organizer."}</span></div>}
+            {roleError && <div className="access-notice access-notice-error" role="alert"><AlertCircle size={17} /><span>{roleError}</span></div>}
+            {user && roleError && <div className="access-account-actions">
+              <button type="button" disabled={!!busy || loading} onClick={async () => {
+                setBusy("account"); setError("");
+                try { await refreshAccountAccess(); }
+                catch (err) { setError(err instanceof Error ? err.message : "Could not refresh account access."); }
+                finally { setBusy(null); }
+              }}>Refresh account access</button>
+              <button type="button" disabled={!!busy || loading} onClick={async () => {
+                setBusy("account"); setError("");
+                try { await logout(); }
+                catch { setError("Sign-out failed. Check your connection and try again."); }
+                finally { setBusy(null); }
+              }}>Use another account</button>
+            </div>}
             {error && <div className="access-notice access-notice-error" role="alert"><AlertCircle size={17} /><span>{error}</span></div>}
             {notice && <div className="access-notice access-notice-success" role="status"><Check size={17} /><span>{notice}</span></div>}
             <form onSubmit={emailSignIn} className="access-form">
-              <div className="access-field"><label htmlFor="access-email">Email address</label><input id="access-email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" disabled={!!busy} value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+              <div className="access-field"><label htmlFor="access-email">Email address</label><input id="access-email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" disabled={disabled} value={email} onChange={(event) => setEmail(event.target.value)} /></div>
               {mode !== "reset" && <>
                 <div className="access-field"><div className="access-label-row"><label htmlFor="access-password">Password</label>{mode === "login" && <button type="button" disabled={!!busy} onClick={() => changeMode("reset")}>Forgot password?</button>}</div>
-                  <div className="access-password"><input id="access-password" type={showPassword ? "text" : "password"} autoComplete={mode === "register" ? "new-password" : "current-password"} required minLength={mode === "register" ? 6 : 1} placeholder={mode === "register" ? "At least 6 characters" : "Enter your password"} disabled={!!busy} value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} disabled={!!busy} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
+                  <div className="access-password"><input id="access-password" type={showPassword ? "text" : "password"} autoComplete={mode === "register" ? "new-password" : "current-password"} required minLength={mode === "register" ? 6 : 1} placeholder={mode === "register" ? "At least 6 characters" : "Enter your password"} disabled={disabled} value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} disabled={disabled} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
                 </div>
-                {mode === "register" && <div className="access-field"><label htmlFor="access-confirmation">Confirm password</label><input id="access-confirmation" type={showPassword ? "text" : "password"} autoComplete="new-password" required minLength={6} placeholder="Enter your password again" disabled={!!busy} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>}
-                <div className="access-field access-role-field"><label htmlFor="access-role">Training role</label><select id="access-role" disabled={!!busy} value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as TrainingRole)}><option value="commander">Commander</option><option value="instructor">Instructor</option><option value="team">Team member</option></select></div>
+                {mode === "register" && <div className="access-field"><label htmlFor="access-confirmation">Confirm password</label><input id="access-confirmation" type={showPassword ? "text" : "password"} autoComplete="new-password" required minLength={6} placeholder="Enter your password again" disabled={disabled} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></div>}
+                <p className="access-role-help">Your account role is assigned by an administrator. New accounts start as Commanders. Instructor and team access must be assigned to your account.</p>
               </>}
               <button type="submit" className="access-submit" disabled={disabled}>{busy === "email" ? <><LoaderCircle size={18} className="access-spinner" /> Please wait</> : <>{mode === "register" ? "Create account" : mode === "reset" ? "Send reset link" : "Sign in"}<ArrowRight size={17} /></>}</button>
             </form>

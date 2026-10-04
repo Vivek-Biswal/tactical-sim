@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { backendRequest, downloadAAR, keyStorage } from "@/simulation/lib/backend";
@@ -15,6 +17,11 @@ function savedKey(id: string) {
 }
 
 export function SharedAAR({ id }: { id: string }) {
+  const { user, role, isFirebaseConfigured } = useAuth();
+  return <AuthGuard>{(!isFirebaseConfigured || (user && role)) && <AccountReview key={`${id}:${user?.uid || "local"}:${role || "practice"}`} id={id} instructor={role === "instructor" || !isFirebaseConfigured} />}</AuthGuard>;
+}
+
+function AccountReview({ id, instructor }: { id: string; instructor: boolean }) {
   const [report, setReport] = useState<ServerAARReport | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,7 +33,7 @@ export function SharedAAR({ id }: { id: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const key = requestedKey || savedKey(id);
+    const key = instructor ? requestedKey || savedKey(id) : "";
     async function load() {
       setLoading(true); setError(""); setReport(null);
       try {
@@ -39,7 +46,7 @@ export function SharedAAR({ id }: { id: string }) {
     }
     void load();
     return () => controller.abort();
-  }, [id, reload, requestedKey]);
+  }, [id, reload, requestedKey, instructor]);
 
   async function exportReport(format: "json" | "csv") {
     setBusy(true); setError("");
@@ -51,9 +58,9 @@ export function SharedAAR({ id }: { id: string }) {
   return <AppShell pageTitle={`AFTER-ACTION REVIEW — ${id}`} role={loadedKey ? "instructor" : "commander"}>
     <div className="mb-5 flex flex-wrap gap-3"><Link className={button} href="/training">← Exercise rooms</Link><Link className={button} href={`/training/${encodeURIComponent(id)}`}>Open this exercise</Link></div>
     <PageHeader label="SERVER EXERCISE RECORD" title={report?.scenarioName ?? "After-action review"} description={`${id} · ${report?.teamName ?? "Review recorded events, radio delivery and decisions."}`} />
-    {error && <div role="alert" className="mt-5 rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-4 text-sm text-[#A94A3F]">{error}<p className="mt-2 text-xs">Participants can read the final report after the exercise ends. An instructor key is required for an earlier preview.</p></div>}
+    {error && <div role="alert" className="mt-5 rounded-lg border border-[#A94A3F] bg-[#FCECE8] p-4 text-sm text-[#A94A3F]">{error}<p className="mt-2 text-xs">Participants can read the final report after the exercise ends. Live previews require the room creator’s Instructor account and room key.</p></div>}
     <div className="my-5 flex flex-wrap items-end gap-3 rounded-xl border border-[#D9D8CE] bg-[#F7F5EE] p-4">
-      <label className="text-xs font-bold text-[#344438]">Instructor key for a live preview (optional)<input className="mt-2 block w-full rounded-lg border border-[#D9D8CE] bg-white p-2 font-normal sm:w-80" type="password" autoComplete="off" value={instructorKey} onChange={event => setInstructorKey(event.target.value)} placeholder="Uses the saved key in the creator's browser" /></label>
+      {instructor && <label className="text-xs font-bold text-[#344438]">Room recovery key for a live preview<input className="mt-2 block w-full rounded-lg border border-[#D9D8CE] bg-white p-2 font-normal sm:w-80" type="password" autoComplete="off" value={instructorKey} onChange={event => setInstructorKey(event.target.value)} placeholder="Uses your saved room key on this browser" /></label>}
       <button className={button} disabled={loading} onClick={() => { setRequestedKey(instructorKey.trim()); setReload(value => value + 1); }}>{loading ? "Loading…" : "Refresh report"}</button>
       {report && <><button className={button} disabled={busy || loading} onClick={() => void exportReport("json")}>Export JSON</button><button className={button} disabled={busy || loading} onClick={() => void exportReport("csv")}>Export decisions CSV</button></>}
     </div>

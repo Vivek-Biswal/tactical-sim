@@ -24,6 +24,8 @@ export interface TacticalMapProps {
   onUnitSelect?: (unit: TacticalUnit) => void;
   onUnitMove?: (id: string, destination: Point) => void;
   movementEnabled?: boolean;
+  /** Shared rooms restrict movement tools to the account's assigned units. */
+  movableUnitIds?: string[];
   className?: string;
   trainingArea?: TrainingArea;
   compact?: boolean;
@@ -35,7 +37,7 @@ const statusStyles: Record<MapStatus,string> = {
 };
 const control = "rounded border border-[#D9D8CE] bg-white p-2 text-[#344438] hover:bg-[#EEF3E8] focus-visible:outline-2 focus-visible:outline-[#556B3F] disabled:opacity-40";
 
-export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStatus="current",mapLastUpdated="No update timestamp supplied",onUnitSelect,onUnitMove,movementEnabled=false,className="",compact=false}:TacticalMapProps) {
+export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStatus="current",mapLastUpdated="No update timestamp supplied",onUnitSelect,onUnitMove,movementEnabled=false,movableUnitIds,className="",compact=false}:TacticalMapProps) {
   const [selection,setSelection]=useState<{type:"unit"|"activity";id:string}|null>(null);
   const [zoom,setZoom]=useState(1);
   const [center,setCenter]=useState<Point>({x:400,y:300});
@@ -62,7 +64,7 @@ export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStat
   const stale=mapStatus==="outdated";
   const selectedUnit=!unavailable && selection?.type==="unit" ? units.find(u=>u.id===selection.id) : undefined;
   const selectedActivity=!unavailable && selection?.type==="activity" ? activityMarkers.find(m=>m.id===selection.id) : undefined;
-  const canMove=!!onUnitMove && movementEnabled && mapStatus==="current" && selectedUnit?.faction==="friendly";
+  const canMove=!!onUnitMove && movementEnabled && mapStatus==="current" && selectedUnit?.faction==="friendly" && (movableUnitIds === undefined || movableUnitIds.includes(selectedUnit.id));
   const viewWidth=MAP_WIDTH/zoom, viewHeight=MAP_HEIGHT/zoom;
   // Marker sizes stay legible in pixels while their anchors keep simulation coordinates.
   const markerScale=Math.max(0.5,Math.min(2.5,1/Math.max(0.1,Math.min(canvasSize.width/viewWidth,canvasSize.height/viewHeight))));
@@ -161,7 +163,7 @@ export function TacticalMap({units,activityMarkers=[],zones,trainingArea,mapStat
         <label className="text-[10px]">Destination X<input aria-label="Destination X" name="x" type="number" required min={0} max={800} defaultValue={Math.round(selectedUnit.x)} disabled={!canMove} className="ml-1 w-16 rounded border border-[#D9D8CE] p-1"/></label>
         <label className="text-[10px]">Y<input aria-label="Destination Y" name="y" type="number" required min={0} max={600} defaultValue={Math.round(selectedUnit.y)} disabled={!canMove} className="ml-1 w-16 rounded border border-[#D9D8CE] p-1"/></label>
         <button type="submit" disabled={!canMove} className={`${control} text-[10px] font-bold`}>Set destination</button>
-        {!canMove&&<p className="text-[10px] text-[#687066]">Start the exercise and select a friendly unit on a current map to move it.</p>}
+        {!canMove&&<p className="text-[10px] text-[#687066]">{movableUnitIds !== undefined && !movableUnitIds.includes(selectedUnit.id) ? "This unit is outside your team. You can view its details; movement stays with its assigned team." : "Start the exercise and select a friendly unit on a current map to move it."}</p>}
       </form>}
       {feedback && <p role="status" className="mt-2 text-[10px] text-[#687066]">{feedback}</p>}
     </div>}

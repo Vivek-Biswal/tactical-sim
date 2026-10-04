@@ -2,34 +2,52 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
 
-from app.service import get_session, is_instructor
+from app.auth import identity_for, is_demo, membership
+from app.service import get_session, is_instructor, require_instructor
 
 router = APIRouter(prefix="/exercises/{exercise_id}", tags=["AAR"])
 
 
-def report(exercise_id, key):
+def report(exercise_id, key, identity):
     session = get_session(exercise_id)
-    if session.status != "completed" and not is_instructor(session, key):
+    member = None
+    if not is_demo():
+        member = membership(session, identity)
+        if key:
+            require_instructor(session, key, identity)
+    instructor = is_instructor(session, key, identity)
+    if session.status != "completed" and not instructor:
         raise HTTPException(409, "Full AAR becomes available after the exercise ends")
-    return session.generate_aar()
+    if not is_demo() and not instructor and member is None:
+        raise HTTPException(403, "Join this exercise before accessing its final AAR")
+    data = session.generate_aar()
+    # Final debrief releases unavailable information so participants can compare
+    # their decisions against the exercise truth after training has ended.
+    data["reviewScope"] = (
+        "instructor" if instructor else "demo" if is_demo() else "participant"
+    )
+    return data
 
 
 @router.get("/aar")
 async def get_aar(
-    exercise_id: str, x_instructor_key: str | None = Header(default=None)
+    exercise_id: str,
+    request: Request,
+    x_instructor_key: str | None = Header(default=None),
 ):
-    return report(exercise_id, x_instructor_key)
+    return report(exercise_id, x_instructor_key, identity_for(request))
 
 
 @router.get("/aar/export")
 async def export_aar(
     exercise_id: str,
+    request: Request,
     format: str = Query(default="json", pattern="^(json|csv)$"),
     x_instructor_key: str | None = Header(default=None),
 ):
-    data = report(exercise_id, x_instructor_key)
+    data = report(exercise_id, x_instructor_key, identity_for(request))
     if format == "json":
         body, mime = json.dumps(data, indent=2), "application/json"
     else:

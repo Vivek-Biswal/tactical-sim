@@ -38,7 +38,7 @@ Checkpoints preserve simulation truth, stale reported state, delayed messages, m
 
 Startup restores active rooms first, then completed rooms, up to the existing 128-room capacity. Archived rooms can be loaded by their ID when capacity is available. Running rooms recover paused; no offline elapsed time is simulated. Reset intentionally replaces the exercise history. In-memory expiry does not delete Firestore records.
 
-Firebase sign-in currently provides frontend identity. Backend endpoints retain their existing participant and instructor-room-key policy; this change does not add Firebase ID-token enforcement to the API.
+Firebase ID tokens now establish backend exercise identity and signed account roles; Instructor privileges additionally require the creating account and room key. Checkpoint `scenario._access` preserves the private creator and fixed memberships, which never appear in trainee state. Legacy checkpoints without an authenticated creator cannot be reused in Firebase mode; create a new exercise. Browser Firestore profiles contain no authority fields. See [account roles](account-roles.md) for provisioning and token-refresh/revocation limits.
 
 ## Validation
 

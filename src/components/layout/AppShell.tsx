@@ -3,14 +3,14 @@
 import React, { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import { useAuth } from "@/components/auth/AuthProvider";
-import { useRouter, usePathname } from "next/navigation";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 type RoleKey = "instructor" | "commander" | "team" | "admin";
 
 interface AppShellProps {
   children: React.ReactNode;
   pageTitle: string;
+  /** Legacy page metadata; account permissions and the header use signed claims. */
   role?: RoleKey;
   workspace?: boolean;
 }
@@ -43,42 +43,12 @@ const ContentBackground = () => (
   </div>
 );
 
-export function AppShell({ children, pageTitle, role, workspace = false }: AppShellProps) {
+export function AppShell({ children, pageTitle, workspace = false }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(workspace);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const { user, loading, isFirebaseConfigured } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-
-  // Firebase sessions are required when authentication is configured.
-  React.useEffect(() => {
-    if (!loading && isFirebaseConfigured && !user) {
-      // Preserve the intended destination so login can redirect back after auth
-      try {
-        sessionStorage.setItem("tactical_sim_redirect", pathname ?? "/training");
-      } catch {
-        // sessionStorage unavailable (private browsing, iframe) – ignore
-      }
-      router.push("/login");
-    }
-  }, [user, loading, isFirebaseConfigured, router, pathname]);
-
-  // Show loading state while Firebase checks auth – avoids a flash of protected content
-  if (isFirebaseConfigured && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F7F5EE]">
-        <div className="flex flex-col items-center gap-3">
-          <span className="w-8 h-8 rounded-full bg-[#556B3F] animate-pulse" />
-          <span className="text-[10px] font-black tracking-widest text-[#344438] uppercase">Authenticating...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (isFirebaseConfigured && !user) return null;
-
   return (
+    <AuthGuard>
     <div className="flex h-screen overflow-hidden bg-[#F7F5EE]">
       {/* ── Mobile overlay ── */}
       {mobileMenuOpen && (
@@ -106,7 +76,6 @@ export function AppShell({ children, pageTitle, role, workspace = false }: AppSh
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopBar
           pageTitle={pageTitle}
-          role={role}
           onMenuToggle={() => setMobileMenuOpen((p) => !p)}
           mobileMenuOpen={mobileMenuOpen}
         />
@@ -120,5 +89,6 @@ export function AppShell({ children, pageTitle, role, workspace = false }: AppSh
         </main>
       </div>
     </div>
+    </AuthGuard>
   );
 }

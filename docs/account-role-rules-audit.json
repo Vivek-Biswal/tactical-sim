@@ -1,0 +1,5 @@
+{
+  "score": 5,
+  "summary": "Static role/profile-rule audit: deployed and local Firestore rules match, strictly validate profile creates and updates, and reject every role/authority field. Profile ownership uses the signed Firebase UID, email matches the signed token, timestamps and lengths are constrained, and exercise data is denied to browser clients. Firebase syntax validation passed. No findings in this scoped rules review; no rules mutation required. This score does not assess backend IAM permissions or replace emulator and deployed application authorization tests.",
+  "findings": []
+}

@@ -127,9 +127,9 @@ class RadioInput(Command):
         validation_alias=AliasChoices("content", "message"),
     )
     sender: str = Field(default="Commander", min_length=1, max_length=80)
-    senderRole: Literal["COMMANDER", "TEAM_ALPHA", "TEAM_BRAVO", "TEAM_CHARLIE"] = (
-        "COMMANDER"
-    )
+    senderRole: Literal[
+        "COMMANDER", "TEAM_ALPHA", "TEAM_BRAVO", "TEAM_CHARLIE", "INSTRUCTOR"
+    ] = "COMMANDER"
 
 
 class TraineeDecisionInput(Command):

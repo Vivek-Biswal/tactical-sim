@@ -1,8 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExerciseNavigation, type ExerciseSection } from "./ExerciseNavigation";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { AuthGuard } from "@/components/auth/AuthGuard";
+import { accountParticipantRole, accountRoleLabels, type AccountRole } from "@/lib/roles";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { OfflineSituation } from "./OfflineExercise";
 import { ExerciseMap } from "@/simulation/components/tactical/ExerciseMap";
@@ -20,33 +23,62 @@ const injections = [
   ["conflicting_report", "Conflicting reports"], ["outdate_map", "Stale map"], ["unavailable_map", "Map unavailable"],
   ["deploy_uav", "Deploy simulated UAV"], ["restore_map", "Restore map"], ["new_intelligence", "New intelligence"], ["decision_required", "Decision prompt"],
 ] as const;
-type Participant = { role: ParticipantRole; name: string; key: string };
+type Participant = { role: ParticipantRole; name: string; key: string; uid?: string };
 type Review = { isFinal: boolean; stats: Record<string, string | number>; analyticalFindings: string[]; decisions: Array<{ id: string; traineeId: string; simulationTime: string; selectedActionLabel: string; rationale: string; communicationState: string; mapStatus: string; availableInformation: string[]; unavailableInformation: string[] }> };
 
 export function SharedExercise({ id, initialRole, section = "map", basePath = `/training/${encodeURIComponent(id)}` }: { id: string; initialRole?: string; section?: ExerciseSection; basePath?: string }) {
+  const { user, role, isFirebaseConfigured } = useAuth();
+  // Discard the previous account's participant and socket, even inside a persistent route layout.
+  return <AuthGuard>{(!isFirebaseConfigured || (user && role)) && <RoomAccess key={`${id}:${user?.uid || "local"}:${role || "practice"}`} id={id} accountRole={isFirebaseConfigured ? role : null} uid={user?.uid} accountName={(user?.displayName || user?.email || user?.uid)?.replace(/\s+/g, " ").trim().slice(0, 80)} initialRole={initialRole} section={section} basePath={basePath} />}</AuthGuard>;
+}
+
+function RoomAccess({ id, accountRole, uid, accountName, initialRole, section, basePath }: { id: string; accountRole: AccountRole | null; uid?: string; accountName?: string; initialRole?: string; section: ExerciseSection; basePath: string }) {
   const [role, setRole] = useState<ParticipantRole>(roles.includes(initialRole as ParticipantRole) ? initialRole as ParticipantRole : "COMMANDER");
-  const [name, setName] = useState("Trainee");
+  const [team, setTeam] = useState<"TEAM_ALPHA" | "TEAM_BRAVO" | "TEAM_CHARLIE">("TEAM_ALPHA");
+  const [name, setName] = useState(accountName || "Trainee");
   const [key, setKey] = useState("");
   const [participant, setParticipant] = useState<Participant | null>(null);
-  return <AppShell pageTitle={`SHARED EXERCISE — ${id}`} role={role === "INSTRUCTOR" ? "instructor" : role === "COMMANDER" ? "commander" : "team"} workspace>
-    {participant ? <SharedSession key={JSON.stringify(participant)} id={id} participant={participant} section={section} basePath={basePath} leave={() => setParticipant(null)} /> :
-      <div className="overflow-y-auto p-4 md:p-8"><div className="mx-auto max-w-xl"><Link href="/training" className="mb-5 inline-block text-xs font-bold text-[#556B3F]">← Exercise rooms</Link><PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">Join Operation Silent Link</span>}>
+  const [boundTeam, setBoundTeam] = useState<"TEAM_ALPHA" | "TEAM_BRAVO" | "TEAM_CHARLIE" | null>(null);
+  const [membershipReady, setMembershipReady] = useState(accountRole !== "team");
+  const [membershipError, setMembershipError] = useState("");
+  const [membershipAttempt, setMembershipAttempt] = useState(0);
+  useEffect(() => {
+    if (accountRole !== "team" || participant) return;
+    const controller = new AbortController();
+    backendRequest<{ role: ParticipantRole | null }>(`/exercises/${encodeURIComponent(id)}/membership`, { signal: controller.signal }, 90000).then(value => {
+      if (controller.signal.aborted) return;
+      if (value.role === "TEAM_ALPHA" || value.role === "TEAM_BRAVO" || value.role === "TEAM_CHARLIE") {
+        setTeam(value.role); setBoundTeam(value.role);
+      }
+      setMembershipReady(true); setMembershipError("");
+    }).catch(failure => {
+      if (!controller.signal.aborted) setMembershipError(failure instanceof Error ? failure.message : "Unable to check your team assignment.");
+    });
+    return () => controller.abort();
+  }, [accountRole, id, membershipAttempt, participant]);
+  const roomRole = accountRole ? accountParticipantRole(accountRole, team) : role;
+  return <AppShell pageTitle={`JOINT EXERCISE — ${id}`} role={roomRole === "INSTRUCTOR" ? "instructor" : roomRole === "COMMANDER" ? "commander" : "team"} workspace>
+    {participant ? <SharedSession key={JSON.stringify(participant)} id={id} participant={participant} section={section} basePath={basePath} leave={() => { setMembershipReady(accountRole !== "team"); setMembershipError(""); setParticipant(null); }} /> :
+      <div className="overflow-y-auto p-4 md:p-8"><div className="mx-auto max-w-xl"><Link href="/training" className="mb-5 inline-block text-xs font-bold text-[#556B3F]">← Exercise rooms</Link><div className="mb-6"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#71805A]">One room · One shared timeline</p><h1 className="mt-2 text-2xl font-black text-[#263229]">Connect with your team.</h1><p className="mt-2 text-sm text-[#687066]">Your instructor runs the exercise. Each participant sees the same simulation through their own account.</p></div><PanelCard header={<div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-black uppercase text-[#344438]">Exercise access</span><span className="rounded bg-[#EEF3E8] px-2 py-1 font-mono text-xs text-[#556B3F]">{id}</span></div>}>
         <form className="space-y-4" onSubmit={event => {
           event.preventDefault();
-          setParticipant({ role, name: name.trim(), key: role === "INSTRUCTOR" ? key.trim() || localStorage.getItem(keyStorage(id)) || "" : "" });
+          if (!membershipReady) return;
+          let saved = "";
+          try { saved = localStorage.getItem(keyStorage(id)) || ""; } catch { /* Explicit key entry remains available. */ }
+          setParticipant({ role: roomRole, name: name.trim(), uid, key: roomRole === "INSTRUCTOR" ? key.trim() || saved : "" });
         }}>
-          <p className="text-sm text-[#687066]">Each browser joins the same server timeline. Choose your training role and callsign.</p>
-          <label className="block text-xs font-bold text-[#344438]">Training role<select className={field} value={role} onChange={event => setRole(event.target.value as ParticipantRole)}>{roles.map(r => <option key={r} value={r}>{r.replaceAll("_", " ")}</option>)}</select></label>
-          <label className="block text-xs font-bold text-[#344438]">Callsign<input className={field} value={name} onChange={event => setName(event.target.value)} required maxLength={80} /></label>
-          {role === "INSTRUCTOR" && <label className="block text-xs font-bold text-[#344438]">Instructor key<input className={field} type="password" value={key} onChange={event => setKey(event.target.value)} placeholder="Uses the saved key in the creator’s browser" autoComplete="off" /><span className="mt-2 block font-normal text-[#687066]">Required on another browser. Keep it separate from participant links.</span></label>}
-          <button className="rounded-lg bg-[#556B3F] px-4 py-3 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50" disabled={!name.trim()}>Connect to exercise</button>
+          {accountRole ? <div className="rounded-lg border border-[#D9D8CE] bg-[#EEF3E8] p-4 text-sm text-[#344438]"><p className="font-black">{accountRoleLabels[accountRole]} account</p><p className="mt-1 text-xs text-[#687066]">{accountRole === "instructor" ? "Manage the room you created. Instructor controls are reserved for your account." : accountRole === "commander" ? "Coordinate teams and record decisions. Your instructor manages exercise settings." : "Send field reports and move your own team. Choose your team below."}</p><span className="mt-3 inline-block text-[10px] font-bold uppercase tracking-widest text-[#556B3F]">Assigned by your administrator</span></div> : <><p className="rounded-lg bg-[#FDF3E3] p-3 text-xs text-[#8A5C2A]">Local development session. Test roles work only with a backend explicitly running in demo mode. Live joint exercises require sign-in.</p><label className="block text-xs font-bold text-[#344438]">Local test role<select className={field} value={role} onChange={event => setRole(event.target.value as ParticipantRole)}>{roles.map(r => <option key={r} value={r}>{r.replaceAll("_", " ")}</option>)}</select></label></>}
+          {accountRole === "team" && <><div><label htmlFor="room-team" className="block text-xs font-bold text-[#344438]">Your team</label><select id="room-team" className={field} aria-describedby="room-team-help" disabled={!membershipReady || Boolean(boundTeam)} value={team} onChange={event => setTeam(event.target.value as typeof team)}><option value="TEAM_ALPHA">Team Alpha</option><option value="TEAM_BRAVO">Team Bravo</option><option value="TEAM_CHARLIE">Team Charlie</option></select><p id="room-team-help" className="mt-2 text-xs text-[#687066]">{boundTeam ? "Your account is assigned to this team for this room." : membershipReady ? "Your first join assigns your account to this team for the room. Reconnect using the same team." : "Checking your team assignment…"}</p></div>{membershipError && <div role="alert" className="rounded-lg bg-[#FCECE8] p-3 text-xs text-[#A94A3F]">{membershipError}<button type="button" className={`${button} mt-3 block`} onClick={() => setMembershipAttempt(value => value + 1)}>Retry team check</button></div>}</>}
+          <div><label className="block text-xs font-bold text-[#344438]">{uid ? "Account name" : "Callsign"}<input className={field} aria-describedby={uid ? "room-account-help" : undefined} value={name} readOnly={Boolean(uid)} onChange={event => setName(event.target.value)} required maxLength={80} /></label>{uid && <p id="room-account-help" className="mt-2 text-xs text-[#687066]">Messages and decisions are recorded against your signed-in account.</p>}</div>
+          {roomRole === "INSTRUCTOR" && <div><label className="block text-xs font-bold text-[#344438]">Room recovery key<input className={field} aria-describedby="room-key-help" type="password" value={key} onChange={event => setKey(event.target.value)} placeholder="Uses your saved key on this browser" autoComplete="off" /></label><p id="room-key-help" className="mt-2 text-xs text-[#687066]">On another browser, enter the key and sign in to the same Instructor account that created this room.</p></div>}
+          <button className="rounded-lg bg-[#556B3F] px-4 py-3 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50" disabled={!name.trim() || !membershipReady}>Connect to exercise</button>
         </form>
       </PanelCard></div></div>}
   </AppShell>;
 }
 
 function SharedSession({ id, participant, leave, section, basePath }: { id: string; participant: Participant; leave: () => void; section: ExerciseSection; basePath: string }) {
-  const { state, connection, error, notice, command } = useSharedExercise(id, participant.role, participant.name, participant.key);
+  const { state, connection, error, notice, command } = useSharedExercise(id, participant.role, participant.name, participant.key, participant.uid);
   const [feedback, setFeedback] = useState("");
   const [feedbackKind, setFeedbackKind] = useState<"info" | "warning" | "error">("info");
   const [busy, setBusy] = useState(false);
@@ -109,7 +141,7 @@ function SharedSession({ id, participant, leave, section, basePath }: { id: stri
         <p className="mt-3 text-xs text-[#687066]">Participants: {state.connectedTrainees?.map(p => `${p.name} (${p.role})`).join(" · ") || "None"}</p></>}
       </PanelCard>}
       {section === "map" && <div className="h-full min-h-[520px] min-w-0">
-            <ExerciseMap compact trainingArea={state.trainingArea} eventLog={state.eventLog} mapSnapshotSecond={state.mapSnapshotSecond} units={state.units} activityMarkers={state.activityMarkers} mapStatus={live ? state.mapStatus : state.mapStatus === "unavailable" ? "unavailable" : "outdated"} mapLastUpdated={live ? state.mapLastUpdated : "Server disconnected — last received snapshot"} movementEnabled={!disabled && running} onUnitMove={(unitId, point) => { void run(() => command("TEAM_MOVEMENT", { unitId, x: point.x, y: point.y })); }} className="h-full" />
+            <ExerciseMap compact trainingArea={state.trainingArea} eventLog={state.eventLog} mapSnapshotSecond={state.mapSnapshotSecond} units={state.units} activityMarkers={state.activityMarkers} mapStatus={live ? state.mapStatus : state.mapStatus === "unavailable" ? "unavailable" : "outdated"} mapLastUpdated={live ? state.mapLastUpdated : "Server disconnected — last received snapshot"} movementEnabled={!disabled && running} movableUnitIds={participant.role.startsWith("TEAM_") ? [`unit-${participant.role.slice(5).toLowerCase()}`] : undefined} onUnitMove={(unitId, point) => { void run(() => command("TEAM_MOVEMENT", { unitId, x: point.x, y: point.y })); }} className="h-full" />
           </div>}
           {section === "situation" && <><p className="text-xs text-[#687066]">Simulated training grid · {state.trainingArea?.name || DEFAULT_TRAINING_AREA.name} · {state.mapStatus.toUpperCase()} · Movement follows the server clock. Team participants can move their own team. Offline radio drops transmissions; intelligence uses a separate relay.</p>
           <OfflineSituation state={state} /></>}
@@ -156,7 +188,7 @@ function SharedSession({ id, participant, leave, section, basePath }: { id: stri
         </div>
         {review && <div className="mt-5 space-y-4 text-sm text-[#344438]"><p className="font-black">{review.isFinal ? "Final AAR" : "Instructor preview"} · {review.stats.messagesDelivered} delivered · {review.stats.messagesDropped} dropped · {review.stats.decisionsCount} decisions</p>{review.analyticalFindings.map(f => <p key={f}>{f}</p>)}{review.decisions.map(d => <details key={d.id} className="rounded-lg border border-[#D9D8CE] p-3"><summary className="cursor-pointer font-bold">{d.simulationTime} · {d.traineeId} · {d.selectedActionLabel}</summary><p className="mt-3">{d.rationale}</p><p className="mt-3">Comms {d.communicationState} · Map {d.mapStatus}</p><p className="mt-3 font-bold">Available at decision</p><ul className="mt-2 list-disc pl-5">{d.availableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul><p className="mt-3 font-bold">Unavailable at decision</p><ul className="mt-2 list-disc pl-5">{d.unavailableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul></details>)}</div>}
       </PanelCard>}
-      {section !== "map" && <p className="text-[10px] text-[#687066]">Training prototype: participant roles are self-selected and instructor controls require a room key. Storage depends on backend configuration. Export the review before resetting the room. Single-browser practice runs separately.</p>}
+      {section !== "map" && <p className="text-[10px] text-[#687066]">{participant.uid ? "Your account role controls access. Only the room’s Instructor can change exercise settings; team accounts move their assigned team." : "Local development test session. Live joint exercises require authenticated accounts."} Export the review before resetting the room.</p>}
     </>}
     </div>
   </div>;

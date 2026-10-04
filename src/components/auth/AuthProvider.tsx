@@ -1,9 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   User,
-  onAuthStateChanged,
+  onIdTokenChanged,
+  getIdTokenResult,
   signOut,
   signInWithPopup,
   signInWithEmailAndPassword,
@@ -12,6 +13,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import { resolveAuthError } from "@/lib/auth";
+import { accountRoleFromClaims, isLocalPracticeHost, type AccountRole } from "@/lib/roles";
 
 /* ── Firestore (optional – only used when Firebase is configured) ── */
 // Dynamically import Firestore so it only loads when Firebase is configured
@@ -46,12 +48,14 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isFirebaseConfigured: boolean;
-  role: string | null;
-  setRole: (role: string | null) => void;
+  isLocalPracticeAvailable: boolean;
+  role: AccountRole | null;
+  roleError: string;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  refreshAccountAccess: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -59,64 +63,67 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isFirebaseConfigured,
+  isLocalPracticeAvailable: false,
   role: null,
-  setRole: () => {},
+  roleError: "",
   loginWithGoogle: async () => {},
   loginWithEmail: async () => {},
   registerWithEmail: async () => {},
   resetPassword: async () => {},
+  refreshAccountAccess: async () => {},
   logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
-function readRole(): string | null {
-  try { return localStorage.getItem("tactical_sim_role"); }
-  catch { return null; }
-}
-
-function subscribeRole(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  window.addEventListener("tactical-role-change", onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener("tactical-role-change", onChange);
-  };
-}
+type AuthSession = { user: User | null; role: AccountRole | null; roleError: string; loading: boolean };
+const subscribePracticeHost = () => () => {};
+const localPracticeSnapshot = () => !isFirebaseConfigured && isLocalPracticeHost(window.location.hostname);
+const serverPracticeSnapshot = () => false;
 
 /* ── Provider ── */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(!!auth);
-  const role = useSyncExternalStore(subscribeRole, readRole, () => null);
-
-  const setRole = (newRole: string | null) => {
-    try {
-      if (newRole) localStorage.setItem("tactical_sim_role", newRole);
-      else localStorage.removeItem("tactical_sim_role");
-      window.dispatchEvent(new Event("tactical-role-change"));
-    } catch {
-      console.warn("[TACTICAL-SIM] Failed to persist role to localStorage.");
-    }
-  };
+  const [{ user, role, roleError, loading }, setSession] = useState<AuthSession>({
+    user: null, role: null, roleError: "", loading: !!auth,
+  });
+  const revision = useRef(0);
+  const isLocalPracticeAvailable = useSyncExternalStore(subscribePracticeHost, localPracticeSnapshot, serverPracticeSnapshot);
 
   /* ── Firebase auth state listener ── */
   useEffect(() => {
-    if (!auth) {
-      // Firebase not configured – skip auth check, allow demo flow
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-      if (currentUser) {
-        // Best-effort Firestore upsert on sign-in
-        void upsertFirestoreUser(currentUser);
-      }
+    if (!auth) return;
+    let disposed = false;
+    let profileUid: string | null = null;
+    const unsubscribe = onIdTokenChanged(auth, (currentUser) => {
+      const requestRevision = ++revision.current;
+      // A routine refresh for the same verified account must not unmount a live exercise.
+      // Account switches and explicit access refreshes still wait for the new claims.
+      setSession(previous => currentUser && previous.user?.uid === currentUser.uid && previous.role && !previous.roleError
+        ? { ...previous, user: currentUser }
+        : { user: currentUser, role: null, roleError: "", loading: !!currentUser });
+      if (!currentUser) { profileUid = null; return; }
+      void getIdTokenResult(currentUser).then((result) => {
+        if (disposed || requestRevision !== revision.current || auth?.currentUser?.uid !== currentUser.uid) return;
+        const assignedRole = accountRoleFromClaims(result.claims);
+        setSession({
+          user: currentUser,
+          role: assignedRole,
+          loading: false,
+          roleError: assignedRole ? "" : "Your account has an unsupported training role. Ask your administrator to update your account access.",
+        });
+        if (assignedRole && profileUid !== currentUser.uid) {
+          profileUid = currentUser.uid;
+          void upsertFirestoreUser(currentUser);
+        }
+      }).catch(() => {
+        if (disposed || requestRevision !== revision.current || auth?.currentUser?.uid !== currentUser.uid) return;
+        setSession({ user: currentUser, role: null, loading: false, roleError: "We could not verify your account access. Sign out and sign in again, or contact your administrator." });
+      });
+    }, () => {
+      ++revision.current;
+      setSession({ user: auth?.currentUser ?? null, role: null, loading: false, roleError: "We could not verify your sign-in session. Please sign in again." });
     });
-
-    return () => unsubscribe();
+    return () => { disposed = true; unsubscribe(); };
   }, []);
 
   /* ── Google sign-in ── */
@@ -150,7 +157,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (auth) {
       await signOut(auth);
     }
-    setRole(null);
+  };
+
+  const refreshAccountAccess = async (): Promise<void> => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser) throw new Error("Sign in before refreshing account access.");
+    const requestRevision = ++revision.current;
+    setSession({ user: currentUser, role: null, roleError: "", loading: true });
+    try {
+      const result = await getIdTokenResult(currentUser, true);
+      // The token listener normally handles this refresh. This also covers an unchanged token.
+      if (requestRevision !== revision.current || auth?.currentUser?.uid !== currentUser.uid) return;
+      const assignedRole = accountRoleFromClaims(result.claims);
+      setSession({ user: currentUser, role: assignedRole, loading: false, roleError: assignedRole ? "" : "Your account has an unsupported training role. Ask your administrator to update your account access." });
+    } catch {
+      if (requestRevision === revision.current) {
+        setSession({ user: currentUser, role: null, loading: false, roleError: "We could not refresh your account access. Check your connection and try again." });
+      }
+      throw new Error("We could not refresh your account access. Check your connection and try again.");
+    }
   };
 
   return (
@@ -159,12 +184,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         isFirebaseConfigured,
+        isLocalPracticeAvailable,
         role,
-        setRole,
+        roleError,
         loginWithGoogle,
         loginWithEmail: (email, password) => emailAction("login", email, password),
         registerWithEmail: (email, password) => emailAction("register", email, password),
         resetPassword: (email) => emailAction("reset", email),
+        refreshAccountAccess,
         logout,
       }}
     >

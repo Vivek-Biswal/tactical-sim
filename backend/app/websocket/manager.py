@@ -1,7 +1,8 @@
 import asyncio
 
-from fastapi import WebSocketDisconnect
+from fastapi import HTTPException, WebSocketDisconnect
 
+from app.auth import connection_identity
 from app.config import settings
 
 
@@ -53,6 +54,7 @@ class ConnectionManager:
 
             async def update(connection):
                 try:
+                    connection_identity(session, connection)
                     instructor = connection["role"] == "INSTRUCTOR"
                     state = session.get_state(instructor)
                     state["connectedTrainees"] = self.get_trainee_status(room)
@@ -95,6 +97,30 @@ class ConnectionManager:
                     await self.send(
                         connection, {"type": "STATE_UPDATE", "state": state}
                     )
+                except HTTPException as error:
+                    try:
+                        await self.send(
+                            connection,
+                            {
+                                "type": "ERROR",
+                                "message": error.detail,
+                                "code": error.status_code,
+                            },
+                        )
+                        await connection["ws"].close(
+                            code=4001 if error.status_code == 401 else 1008,
+                            reason="Sign-in expired"
+                            if error.status_code == 401
+                            else "Access denied",
+                        )
+                    except (
+                        WebSocketDisconnect,
+                        RuntimeError,
+                        OSError,
+                        asyncio.TimeoutError,
+                    ):
+                        pass
+                    self.disconnect(connection["ws"], room)
                 except (
                     WebSocketDisconnect,
                     RuntimeError,

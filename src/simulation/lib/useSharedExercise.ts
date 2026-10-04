@@ -1,13 +1,13 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExerciseState } from "../types/exercise";
-import { socketUrl } from "./backend";
+import { getBackendIdentityToken, socketUrl } from "./backend";
 import { parseSharedPacket, type ScenarioNotice } from "./sharedProtocol";
 
 export type ParticipantRole = "COMMANDER" | "TEAM_ALPHA" | "TEAM_BRAVO" | "TEAM_CHARLIE" | "INSTRUCTOR";
 type Pending = { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
-export function useSharedExercise(id: string, role: ParticipantRole, name: string, instructorKey: string) {
+export function useSharedExercise(id: string, role: ParticipantRole, name: string, instructorKey: string, identityUid?: string) {
   const [state, setState] = useState<ExerciseState | null>(null);
   const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting" | "error">("connecting");
   const [error, setError] = useState("");
@@ -43,9 +43,17 @@ export function useSharedExercise(id: string, role: ParticipantRole, name: strin
         setError(lastError);
         ws.close();
       }, 20000);
-      ws.onopen = () => {
+      ws.onopen = async () => {
         if (disposed) { ws.close(); return; }
-        ws.send(JSON.stringify({ type: "JOIN", role, name, instructorKey: role === "INSTRUCTOR" ? instructorKey : undefined }));
+        try {
+          const idToken = await getBackendIdentityToken(identityUid);
+          if (disposed || ws.readyState !== WebSocket.OPEN) return;
+          ws.send(JSON.stringify({ type: "JOIN", role, name, idToken, instructorKey: role === "INSTRUCTOR" ? instructorKey : undefined }));
+        } catch (failure) {
+          lastError = failure instanceof Error ? failure.message : "Sign in again before joining this exercise.";
+          setError(lastError); setConnection("error");
+          ws.close(1008, "Sign-in required");
+        }
       };
       ws.onmessage = event => {
         if (disposed) return;
@@ -73,7 +81,7 @@ export function useSharedExercise(id: string, role: ParticipantRole, name: strin
         if (disposed) return;
         clearTimeout(joinTimeout);
         rejectPending();
-        if (event.code === 1008) { setError(lastError || event.reason || "The server refused this room or training role. Check the room ID and instructor key."); setConnection("error"); return; }
+        if (event.code === 1008) { setError(lastError || event.reason || "Your account cannot join this room in the requested role. Check your account, room ID and instructor key."); setConnection("error"); return; }
         setConnection("reconnecting");
         setError(lastError || "Server connection lost. Controls are disabled while reconnecting.");
         reconnect = setTimeout(connect, Math.min(10000, 1000 * 2 ** Math.min(attempts++, 4)));
@@ -82,7 +90,7 @@ export function useSharedExercise(id: string, role: ParticipantRole, name: strin
     }
     connect();
     return () => { disposed = true; clearTimeout(reconnect); clearTimeout(joinTimeout); rejectPending(); socket.current?.close(); socket.current = null; };
-  }, [id, role, name, instructorKey]);
+  }, [id, role, name, instructorKey, identityUid]);
 
   const command = useCallback((type: string, payload: Record<string, unknown> = {}) => {
     return new Promise<Record<string, unknown>>((resolve, reject) => {

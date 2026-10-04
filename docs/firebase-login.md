@@ -11,13 +11,13 @@ The existing `/login` page supports Google, email/password sign-in, account crea
 
 ## Behavior and scope
 
-- The homepage Login and Start training buttons open `/login` directly, without the old demo role modal. The login card uses Sign in/Create account tabs, Google sign-in, an email form, password visibility, and a compact role selector (Commander by default).
-- Choose a training role, then authenticate. New email accounts are signed in immediately.
+- The homepage Login and Start training buttons open `/login` directly, without the old demo role modal. The login card uses Sign in/Create account tabs, Google sign-in, an email form and password visibility. Account roles are assigned by administrators through signed Firebase claims; there is no privileged self-assignment selector.
+- Authenticate with Google or email. New email accounts are signed in immediately and start as Commanders unless an administrator has assigned another signed role.
 - Forgot password sends Firebase's reset email; Firebase completes the password change through its hosted action handler.
 - Existing Firebase sessions persist through the SDK and sign-out uses Firebase.
-- Saved redirects are limited to local paths. A selected role no longer bypasses Firebase login. Configured signed-out users see a loading/redirect state without protected page content.
-- When Firebase configuration is absent, sign-in controls are disabled with an honest unavailable message. The login page does not offer demo access. Existing standalone simulation functionality remains unchanged.
-- Training roles choose dashboards; they are not administrator privileges. Simulation room instructor keys remain unchanged. The FastAPI service does not yet verify Firebase ID tokens; this change adds frontend identity and does not claim server-side Firebase authorization.
+- Saved redirects are limited to local paths permitted by the signed account role. Configured signed-out users see a loading/redirect state without protected page content. Accounts cannot use another role's workspace by editing local storage or the URL.
+- When Firebase configuration is absent, sign-in controls are disabled with an honest unavailable message. Unconfigured localhost can open clearly labeled local map practice; deployed account pages do not grant demo privileges.
+- The backend verifies Firebase ID tokens for exercise endpoints and checks signed account roles independently of the UI. Instructor operations require the Instructor account, creating UID and room key. See [account roles](account-roles.md) for provisioning, refresh and token-revocation limitations.
 - Firestore's pre-existing optional user-profile sync can fail without blocking authentication. Firebase Authentication does not require a Firestore database.
 
 ## Verify after deployment

@@ -1,9 +1,11 @@
 import json
 import time
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 from app.scenario_engine.engine import engine_manager
 from app.websocket.manager import ws_manager
@@ -19,6 +21,9 @@ def packet(ws, kind, predicate=lambda p: True):
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
+        demo = patch.object(settings, "AUTH_MODE", "demo")
+        demo.start()
+        self.addCleanup(demo.stop)
         engine_manager.exercises.clear()
         ws_manager.active_connections.clear()
         ws_manager.room_locks.clear()

@@ -1,10 +1,12 @@
 import json
 import unittest
 from copy import deepcopy
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.config import settings
 from app.main import app
 from app.persistence import checkpoint, restore_checkpoint
 from app.scenario_engine.engine import ExerciseSession, engine_manager
@@ -168,7 +170,7 @@ class TrainingMapsTests(unittest.TestCase):
         engine_manager.exercises.clear()
         ws_manager.active_connections.clear()
         ws_manager.room_locks.clear()
-        with TestClient(app) as client:
+        with patch.object(settings, "AUTH_MODE", "demo"), TestClient(app) as client:
             catalog = client.get("/api/scenarios/training-areas")
             self.assertEqual(catalog.status_code, 200)
             self.assertEqual(len(catalog.json()), 10)
