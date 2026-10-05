@@ -9,8 +9,13 @@ const textFields = (value: ObjectValue, names: string[]) => names.every(name => 
 const list = (value: unknown, check: (item: unknown) => boolean) => Array.isArray(value) && value.every(check);
 const unit = (value: unknown) => object(value) && textFields(value, ["id", "name", "type", "faction", "status"]) && finite(value.x) && finite(value.y);
 const activity = (value: unknown) => object(value) && textFields(value, ["id", "label", "type", "status"]) && finite(value.x) && finite(value.y);
-const message = (value: unknown) => object(value) && textFields(value, ["id", "sender", "content", "deliveryStatus"]) && ["DELIVERED", "DELAYED", "DROPPED", "PENDING"].includes(value.deliveryStatus as string);
-const decision = (value: unknown) => object(value) && textFields(value, ["id", "traineeId", "simulationTime", "selectedActionLabel", "rationale", "communicationState"]) && strings(value.availableInformation) && strings(value.unavailableInformation);
+const optionalSeconds = (value: ObjectValue, names: string[]) => names.every(name => value[name] == null || (finite(value[name]) && (value[name] as number) >= 0));
+const message = (value: unknown) => object(value) && textFields(value, ["id", "sender", "content", "deliveryStatus"]) && ["DELIVERED", "DELAYED", "DROPPED", "PENDING"].includes(value.deliveryStatus as string) && optionalSeconds(value, ["generatedSecond", "deliveredSecond", "configuredDelaySeconds"]) && (value.reliability == null || typeof value.reliability === "string") && (value.confirmed == null || typeof value.confirmed === "boolean");
+const decision = (value: unknown) => {
+  if (!object(value) || !textFields(value, ["id", "traineeId", "simulationTime", "selectedActionLabel", "rationale", "communicationState"]) || !strings(value.availableInformation) || !strings(value.unavailableInformation) || !optionalSeconds(value, ["simulationSecond", "decisionRequiredSecond", "decisionEventSecond", "responseLatencySeconds"])) return false;
+  const snapshot = value.informationSnapshot;
+  return snapshot == null || (object(snapshot) && (snapshot.reportIds == null || strings(snapshot.reportIds)) && optionalSeconds(snapshot, ["mapSnapshotSecond", "radioDelaySeconds"]) && (snapshot.reliability == null || typeof snapshot.reliability === "string"));
+};
 const event = (value: unknown) => object(value) && textFields(value, ["id", "time", "title", "description", "category"]) && finite(value.second);
 
 /** Reject unusable updates instead of enabling controls against malformed state. */

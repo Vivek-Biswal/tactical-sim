@@ -28,6 +28,10 @@ def report(exercise_id, key, identity):
     data["reviewScope"] = (
         "instructor" if instructor else "demo" if is_demo() else "participant"
     )
+    data["participants"] = [
+        {"role": value["role"], "name": value["name"]}
+        for value in session.scenario.get("_access", {}).get("memberships", {}).values()
+    ]
     return data
 
 
@@ -64,6 +68,12 @@ async def export_aar(
                 "map",
                 "availableInformation",
                 "unavailableInformation",
+                "decisionRequiredSecond",
+                "decisionSubmissionSecond",
+                "responseLatencySeconds",
+                "availableReportIds",
+                "mapSnapshotSecond",
+                "radioDelaySeconds",
             ]
         )
 
@@ -89,6 +99,12 @@ async def export_aar(
                         d["mapStatus"],
                         " | ".join(d["availableInformation"]),
                         " | ".join(d["unavailableInformation"]),
+                        d.get("decisionRequiredSecond") if d.get("decisionRequiredSecond") is not None else "Not available",
+                        d["simulationSecond"],
+                        d.get("responseLatencySeconds") if d.get("responseLatencySeconds") is not None else "Not available",
+                        " | ".join(d.get("informationSnapshot", {}).get("reportIds", [])),
+                        d.get("informationSnapshot", {}).get("mapSnapshotSecond", "Not available"),
+                        d.get("informationSnapshot", {}).get("radioDelaySeconds", "Not available"),
                     ]
                 ]
             )

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Activity, ClipboardList, FileText, Map, Radio, Settings2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { DEFAULT_TRAINING_AREA } from "@/simulation/lib/geography";
 import { formatExerciseTime, type ExerciseSection } from "./ExerciseNavigation";
 import {
@@ -30,6 +31,11 @@ function toolForSection(section: ExerciseSection): MapTool | null {
 }
 
 export function TrainingMapWorkspace({ section }: { section: ExerciseSection }) {
+  const { user } = useAuth();
+  return <PracticeMaps key={user?.uid ?? "local"} section={section} />;
+}
+
+function PracticeMaps({ section }: { section: ExerciseSection }) {
   const { state, engine } = useOfflineExercise("map-practice");
   // Legacy /maps/section links still open the corresponding tool. Tool buttons
   // stay on this page so the map, simulation and unsent drafts remain mounted.

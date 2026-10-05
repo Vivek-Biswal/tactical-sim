@@ -18,6 +18,7 @@ export interface SimulationEventLog {
   description: string;
   category: "comms" | "map" | "intel" | "decision" | "system" | "instructor" | "general" | string;
   payload?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface ExerciseState {
@@ -58,9 +59,14 @@ export interface AARReportData {
   exerciseId: string;
   scenarioName: string;
   teamName: string;
-  startedAt: number;
-  completedAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
   durationSeconds: number;
+  isFinal?: boolean;
+  status?: ExerciseStatus;
+  scenarioCode?: string;
+  reviewScope?: string;
+  participants?: TraineePresence[];
   // Legacy timeline (used by old DecisionTimeline component)
   commsTimeline: Array<{
     time: string;
@@ -82,6 +88,7 @@ export interface AARReportData {
     messagesDelivered: number;
     messagesDelayed: number;
     messagesDropped: number;
+    messagesPending?: number;
     decisionsCount: number;
     finalCommsStatus: CommsStatus;
     finalMapStatus: MapStatus;

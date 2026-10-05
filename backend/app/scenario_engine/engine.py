@@ -606,6 +606,11 @@ class ExerciseSession:
                 "radioDelay": self.radio_delay_seconds,
                 "mapStatus": self.map_status,
                 **(
+                    {"decisionPointId": self.active_decision["id"]}
+                    if kind == "DECISION_REQUIRED" and self.active_decision
+                    else {}
+                ),
+                **(
                     {
                         "unit": deepcopy(
                             next(u for u in self.units if u["id"] == "unit-uav")
@@ -662,12 +667,14 @@ class ExerciseSession:
             "deliveryStatus": "PENDING",
             "communicationState": self.comms_status,
             "delayRemaining": 0,
+            "generatedSecond": self.elapsed_seconds,
         }
 
     def send_radio_message(self, sender, role, content):
         self.require_running()
         self.require_capacity()
         message = self.make_message(sender, role, content)
+        message.update(channel="TACTICAL_RADIO", messageType="UNIT_REPORT")
         self.messages.append(message)
         index = len(self.messages) - 1
         if self.comms_status == "offline":
@@ -677,6 +684,7 @@ class ExerciseSession:
                 status="delayed",
                 deliveryStatus="DELAYED",
                 wasDelayed=True,
+                configuredDelaySeconds=self.radio_delay_seconds,
                 delayRemaining=self.radio_delay_seconds,
             )
             self.pending_messages[index] = (
@@ -701,6 +709,7 @@ class ExerciseSession:
             status="delivered",
             deliveryStatus="DELIVERED",
             timestampDelivered=self.elapsed_seconds,
+            deliveredSecond=self.elapsed_seconds,
             formattedTimeDelivered=clock(self.elapsed_seconds),
             delayRemaining=0,
         )
@@ -748,6 +757,8 @@ class ExerciseSession:
         self.require_capacity()
         available, unavailable = self.information()
         point = self.active_decision
+        if point and point.get("situation"):
+            available.append(f"Decision briefing: {point['situation']}")
         if selected_action_id and (
             not point
             or selected_action_id not in [a["id"] for a in point["availableActions"]]
@@ -769,6 +780,12 @@ class ExerciseSession:
             "realTimestamp": time.time(),
             "communicationState": self.comms_status,
             "mapStatus": self.map_status,
+            "decisionRequiredSecond": point["simulationSecond"] if point else None,
+            "decisionEventSecond": point["simulationSecond"] if point else None,
+            "responseLatencySeconds": (
+                round(self.elapsed_seconds - point["simulationSecond"], 3)
+                if point else None
+            ),
             "availableInformation": available,
             "unavailableInformation": unavailable,
             "informationSnapshot": {
@@ -777,6 +794,13 @@ class ExerciseSession:
                 if self.map_status == "unavailable"
                 else deepcopy(self.reported_units),
                 "mapSnapshotSecond": self.map_snapshot_second,
+                "radioDelaySeconds": self.radio_delay_seconds,
+                "reliability": (
+                    "conflicting" if any(
+                        m.get("isConflicting") and m["status"] == "delivered"
+                        for m in self.messages
+                    ) else "not_assessed"
+                ),
                 "trainingArea": deepcopy(self.training_area),
             },
         }
@@ -800,6 +824,8 @@ class ExerciseSession:
             "completedAt": self.completed_at,
             "durationSeconds": self.elapsed_seconds,
             "isFinal": self.status == "completed",
+            "status": self.status,
+            "scenarioCode": self.scenario["codeName"],
             "trainingArea": deepcopy(self.training_area),
             "commsTimeline": deepcopy(self.event_log),
             "fullEventLog": deepcopy(self.event_log),

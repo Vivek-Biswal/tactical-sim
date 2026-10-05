@@ -13,6 +13,8 @@ import { TrainingAreaFields } from "@/simulation/components/geographic/TrainingA
 import { DEFAULT_TRAINING_AREA, trainingAreaError } from "@/simulation/lib/geography";
 import type { TrainingArea } from "@/simulation/types/geography";
 import { backendRequest, downloadAAR, keyStorage } from "@/simulation/lib/backend";
+import { AARReview } from "@/components/aar/AARReview";
+import { isServerAARReport, type ServerAARReport } from "@/simulation/lib/sharedProtocol";
 import { useSharedExercise, type ParticipantRole } from "@/simulation/lib/useSharedExercise";
 
 const button = "rounded-lg border border-[#D9D8CE] bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#344438] hover:bg-[#EEF3E8] disabled:opacity-40";
@@ -24,7 +26,7 @@ const injections = [
   ["deploy_uav", "Deploy simulated UAV"], ["restore_map", "Restore map"], ["new_intelligence", "New intelligence"], ["decision_required", "Decision prompt"],
 ] as const;
 type Participant = { role: ParticipantRole; name: string; key: string; uid?: string };
-type Review = { isFinal: boolean; stats: Record<string, string | number>; analyticalFindings: string[]; decisions: Array<{ id: string; traineeId: string; simulationTime: string; selectedActionLabel: string; rationale: string; communicationState: string; mapStatus: string; availableInformation: string[]; unavailableInformation: string[] }> };
+
 
 export function SharedExercise({ id, initialRole, section = "map", basePath = `/training/${encodeURIComponent(id)}` }: { id: string; initialRole?: string; section?: ExerciseSection; basePath?: string }) {
   const { user, role, isFirebaseConfigured } = useAuth();
@@ -113,7 +115,7 @@ function SharedSession({ id, participant, leave, section, basePath, onJoined }: 
   const [confidence, setConfidence] = useState("medium");
   const [delay, setDelay] = useState(10);
   const [intel, setIntel] = useState("Sector 4 activity reported. Reliability: medium. Verify independently.");
-  const [review, setReview] = useState<Review | null>(null);
+  const [review, setReview] = useState<ServerAARReport | null>(null);
   const instructor = participant.role === "INSTRUCTOR";
   const live = connection === "live";
   useEffect(() => { if (live) onJoined(participant.role); }, [live, onJoined, participant.role]);
@@ -205,12 +207,12 @@ function SharedSession({ id, participant, leave, section, basePath, onJoined }: 
       {section === "review" && <PanelCard header={<span className="text-xs font-black uppercase text-[#344438]">After-action review</span>}>
         <p className="text-xs text-[#687066]">{state.status === "completed" ? "Final report available for all participants." : "Full review is available to the instructor during training, and to participants after the exercise ends."}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className={button} disabled={disabled || (!instructor && state.status !== "completed")} onClick={() => void run(async () => { setReview(await backendRequest<Review>(`/exercises/${id}/aar`, { headers: participant.key ? { "X-Instructor-Key": participant.key } : {} })); })}>View AAR</button>
+          <button className={button} disabled={disabled || (!instructor && state.status !== "completed")} onClick={() => void run(async () => { const value = await backendRequest<unknown>(`/exercises/${id}/aar`, { headers: participant.key ? { "X-Instructor-Key": participant.key } : {} }); if (!isServerAARReport(value, id)) throw new Error("The server returned an incomplete review."); setReview(value); })}>View AAR</button>
           <Link className={`${button} inline-block`} href={`/aar/${encodeURIComponent(id)}`}>Open full review page</Link>
           {(["json", "csv"] as const).map(format => <button className={button} key={format} disabled={disabled || (!instructor && state.status !== "completed")} onClick={() => void run(() => downloadAAR(id, participant.key, format))}>Export {format.toUpperCase()}</button>)}
           <button className={button} onClick={() => void run(async () => { await navigator.clipboard.writeText(`${window.location.origin}/training/${id}`); setFeedback("Participant link copied. This link has no instructor key."); })}>Copy participant link</button>
         </div>
-        {review && <div className="mt-5 space-y-4 text-sm text-[#344438]"><p className="font-black">{review.isFinal ? "Final AAR" : "Instructor preview"} · {review.stats.messagesDelivered} delivered · {review.stats.messagesDropped} dropped · {review.stats.decisionsCount} decisions</p>{review.analyticalFindings.map(f => <p key={f}>{f}</p>)}{review.decisions.map(d => <details key={d.id} className="rounded-lg border border-[#D9D8CE] p-3"><summary className="cursor-pointer font-bold">{d.simulationTime} · {d.traineeId} · {d.selectedActionLabel}</summary><p className="mt-3">{d.rationale}</p><p className="mt-3">Comms {d.communicationState} · Map {d.mapStatus}</p><p className="mt-3 font-bold">Available at decision</p><ul className="mt-2 list-disc pl-5">{d.availableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul><p className="mt-3 font-bold">Unavailable at decision</p><ul className="mt-2 list-disc pl-5">{d.unavailableInformation.map((info, i) => <li key={i}>{info}</li>)}</ul></details>)}</div>}
+        {review && <div className="mt-5"><AARReview report={review} role={instructor ? "Instructor" : "Trainee"} /></div>}
       </PanelCard>}
       {section !== "map" && <p className="text-[10px] text-[#687066]">{participant.uid ? "Your room role controls access. Only the room creator can change exercise settings; team accounts move their assigned team." : "Local development test session. Live joint exercises require authenticated accounts."} Export the review before resetting the room.</p>}
     </>}

@@ -26,7 +26,7 @@ export function OfflineWorkspace({ id, role, section, basePath }: { id: string; 
         {section === "situation" && <OfflineSituation state={state} />}
         {section === "communications" && <OfflineComms state={state} engine={engine} draft={{ value: radioDraft, setValue: setRadioDraft }} sender={title} senderRole={role} />}
         {section === "decisions" && (team || instructor ? <PanelCard header="Recorded decisions"><p className="text-sm text-[#687066]">Commander decisions are recorded in this exercise’s review.</p><Link href={`${basePath}/review`} className="mt-4 inline-block text-sm font-bold text-[#556B3F]">Open review →</Link></PanelCard> : <OfflineDecision state={state} engine={engine} draft={{ value: rationaleDraft, setValue: setRationaleDraft }} />)}
-        {section === "review" && <OfflineReview state={state} engine={engine} />}
+        {section === "review" && <OfflineReview state={state} engine={engine} role={title} />}
       </div>}
     </div>
   </AppShell>;

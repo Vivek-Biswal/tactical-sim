@@ -32,6 +32,18 @@ export interface DecisionRecord {
   scenarioTimestamp: number;
   realTimestamp: number;
   communicationState: CommsStatus;
+  simulationSecond?: number;
+  decisionRequiredSecond?: number | null;
+  decisionEventSecond?: number | null;
+  responseLatencySeconds?: number | null;
+  mapStatus?: string;
+  informationSnapshot?: {
+    reportIds: string[];
+    units?: import("./scenario").TacticalUnit[];
+    mapSnapshotSecond?: number;
+    radioDelaySeconds?: number;
+    reliability?: string;
+  };
   
   // Optional relations
   relatedSector?: string;

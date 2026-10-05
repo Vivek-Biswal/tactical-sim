@@ -24,6 +24,14 @@ export interface RadioMessage {
   delayRemaining?: number;
   isConflicting?: boolean;
   conflictGroupId?: string;
+  generatedSecond?: number;
+  deliveredSecond?: number;
+  wasDelayed?: boolean;
+  configuredDelaySeconds?: number;
+  channel?: string;
+  reliability?: string;
+  confirmed?: boolean;
+  dropReason?: string;
 }
 
 export interface CommunicationConfig {
