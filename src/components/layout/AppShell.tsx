@@ -1,11 +1,48 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 
 type RoleKey = "instructor" | "commander" | "team" | "admin";
+
+const sidebarPreferenceKey = "tactical_sim_sidebar_v1";
+const sidebarPreferenceEvent = "tactical-sim-sidebar-change";
+let sidebarCollapsedFallback = false;
+
+function sidebarSnapshot() {
+  try {
+    const saved = window.localStorage.getItem(sidebarPreferenceKey);
+    return saved === null ? sidebarCollapsedFallback : saved === "collapsed";
+  } catch {
+    return sidebarCollapsedFallback;
+  }
+}
+
+function subscribeSidebar(callback: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === sidebarPreferenceKey || event.key === null) callback();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(sidebarPreferenceEvent, callback);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(sidebarPreferenceEvent, callback);
+  };
+}
+
+const expandedSidebarSnapshot = () => false;
+
+function toggleSidebar() {
+  sidebarCollapsedFallback = !sidebarSnapshot();
+  try {
+    window.localStorage.setItem(sidebarPreferenceKey, sidebarCollapsedFallback ? "collapsed" : "expanded");
+  } catch {
+    // Keep the user's choice for this session when browser storage is disabled.
+  }
+  window.dispatchEvent(new Event(sidebarPreferenceEvent));
+}
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -44,7 +81,7 @@ const ContentBackground = () => (
 );
 
 export function AppShell({ children, pageTitle, role, workspace = false }: AppShellProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(workspace);
+  const sidebarCollapsed = useSyncExternalStore(subscribeSidebar, sidebarSnapshot, expandedSidebarSnapshot);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -68,7 +105,7 @@ export function AppShell({ children, pageTitle, role, workspace = false }: AppSh
       >
         <Sidebar
           collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((p) => !p)}
+          onToggle={toggleSidebar}
         />
       </div>
 

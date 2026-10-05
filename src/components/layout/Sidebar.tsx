@@ -138,9 +138,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Collapse toggle */}
       <button
+        type="button"
         onClick={onToggle}
         className="flex items-center justify-center py-3 border-t border-[#2A3830] text-[#71805A] hover:text-white hover:bg-[#2A3830] transition-colors"
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-expanded={!collapsed}
       >
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>

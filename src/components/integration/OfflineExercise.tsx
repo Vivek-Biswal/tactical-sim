@@ -50,7 +50,7 @@ export function OfflineMap({ state, engine, compact = false }: { state: Exercise
 }
 
 export function OfflineSetup({ state, engine }: { state: ExerciseState; engine: LocalSimulationEngine }) {
-  return <PanelCard header="Training setup"><p className="mb-4 text-sm text-[#687066]">Choose your training area and force before starting. Page navigation keeps this practice exercise running; a full browser refresh starts a new practice.</p><TrainingAreaFields value={state.trainingArea ?? DEFAULT_TRAINING_AREA} onChange={area => engine.setTrainingArea(area)} disabled={state.status !== "pending"} /><div className="mt-5"><OfflineControls state={state} engine={engine} /></div></PanelCard>;
+  return <PanelCard header="Training setup"><p className="mb-4 text-sm text-[#687066]">Choose your training area and force before starting. Switching exercise tools keeps your practice running; a full browser refresh starts a new practice.</p><TrainingAreaFields value={state.trainingArea ?? DEFAULT_TRAINING_AREA} onChange={area => engine.setTrainingArea(area)} disabled={state.status !== "pending"} /><div className="mt-5"><OfflineControls state={state} engine={engine} /></div></PanelCard>;
 }
 
 export function OfflineControls({ state, engine, instructor = false }: { state: ExerciseState; engine: LocalSimulationEngine; instructor?: boolean }) {
