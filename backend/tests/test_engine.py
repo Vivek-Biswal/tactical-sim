@@ -1,7 +1,11 @@
 import unittest
 from copy import deepcopy
 
+from pydantic import ValidationError
+
 from app.scenario_engine.engine import ExerciseSession
+from app.scenario_engine.events import get_operation_silent_link
+from app.schemas.models import EventPayload, RadioInput, TraineeDecisionInput
 
 
 class EngineTests(unittest.TestCase):
@@ -120,3 +124,66 @@ class EngineTests(unittest.TestCase):
         s.end()
         self.assertEqual(s.generate_aar()["stats"]["messagesPending"], 0)
         self.assertIsNotNone(s.completed_at)
+
+    def test_work_file_compatible_payloads_and_public_map_aliases(self):
+        command = TraineeDecisionInput.model_validate(
+            {
+                "decision": "Hold",
+                "rationale": "Confirm both reports",
+                "confidence": " MEDIUM ",
+            }
+        )
+        self.assertEqual(command.confidence, "medium")
+        radio = RadioInput.model_validate({"message": "Team Alpha, report."})
+        self.assertEqual(radio.content, "Team Alpha, report.")
+        with self.assertRaises(ValidationError):
+            RadioInput.model_validate({"content": "A", "message": "B"})
+        with self.assertRaises(ValidationError):
+            TraineeDecisionInput.model_validate(
+                {"decision": "Hold", "rationale": "Confirm", "confidence": "certain"}
+            )
+        values = EventPayload.model_validate(
+            {"message": "A new observation needs checking", "reliability": "HIGH"}
+        )
+        self.assertEqual(values.content, "A new observation needs checking")
+        self.assertEqual(values.reliability, "high")
+        with self.assertRaises(ValidationError):
+            EventPayload.model_validate({"content": "A", "message": "B"})
+        s = self.room()
+        s.apply_instructor_inject(
+            "new_intelligence", {"message": values.content, "reliability": "HIGH"}
+        )
+        self.assertEqual(s.reports[-1]["reliability"], "high")
+        self.assertEqual(s.messages[-1]["reliability"], "high")
+        self.assertIn("high reliability", s.activities[-1]["label"])
+        decision = s.record_decision(
+            command.decision, command.rationale, command.confidence
+        )
+        s.end()
+        self.assertEqual(s.generate_aar()["messages"][-1]["reliability"], "high")
+        self.assertEqual(s.generate_aar()["decisions"][0], decision)
+        self.assertEqual(s.get_state()["activities"], s.get_state()["activityMarkers"])
+        s.map_status = "unavailable"
+        self.assertEqual(s.get_state()["activities"], [])
+
+    def test_scenario_metadata_describes_actual_delay_and_report_payloads(self):
+        scenario = get_operation_silent_link()
+        by_type = {e["type"]: e for e in scenario["events"]}
+        self.assertEqual(by_type["RADIO_DELAY"]["payload"]["delay"], 10)
+        self.assertTrue(by_type["CONFLICTING_REPORT"]["payload"]["reportA"])
+        self.assertTrue(by_type["CONFLICTING_REPORT"]["payload"]["reportB"])
+        self.assertEqual(
+            by_type["CONFLICTING_REPORT"]["payload"]["reliability"], "unverified"
+        )
+        self.assertEqual(
+            by_type["NEW_INTELLIGENCE"]["payload"]["reliability"], "medium"
+        )
+        # Scenario catalog callers cannot mutate another room's payloads.
+        by_type["RADIO_DELAY"]["payload"]["delay"] = 1
+        other = get_operation_silent_link()
+        self.assertEqual(
+            next(e for e in other["events"] if e["type"] == "RADIO_DELAY")["payload"][
+                "delay"
+            ],
+            10,
+        )

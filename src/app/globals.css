@@ -17,3 +17,10 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.exercise-map:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  padding: 12px;
+  background: #F7F5EE;
+}

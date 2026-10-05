@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function validNullableString(value, maxLength) {
+      return value == null || (value is string && value.size() <= maxLength);
+    }
+    function isValidUser(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'lastLoginAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'lastLoginAt'])
+        && data.uid == uid
+        && validNullableString(data.email, 320)
+        && data.email == request.auth.token.get('email', null)
+        && validNullableString(data.displayName, 200)
+        && validNullableString(data.photoURL, 2048)
+        && (data.photoURL == null || data.photoURL.matches('^https://.*'))
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.lastLoginAt == request.time;
+    }
+    match /users/{uid} {
+      allow get: if isOwner(uid);
+      allow list, delete: if false;
+      allow create: if isOwner(uid) && isValidUser(request.resource.data, uid)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(uid) && isValidUser(request.resource.data, uid)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+    // Authoritative exercise data is private. Only the backend's IAM identity
+    // can write/read it; browser Firebase accounts cannot bypass room filtering.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

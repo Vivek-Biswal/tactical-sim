@@ -3,9 +3,10 @@ import React, { useId } from "react";
 interface TacticalGridProps {
   width?: number;
   height?: number;
+  legacyLabels?: boolean;
 }
 
-export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height = 600 }) => {
+export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height = 600, legacyLabels = true }) => {
   const id = useId();
   const gridSize = 50;
   const cols = Math.floor(width / gridSize);
@@ -58,7 +59,8 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
       <line x1={width / 2} y1={0} x2={width / 2} y2={height} stroke="#71805A" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
       <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#71805A" strokeWidth="1" strokeDasharray="6,6" opacity={0.4} />
 
-      {/* Sector Name Watermarks */}
+      {/* Legacy scenarios keep their original sector references. */}
+      {legacyLabels && <>
       <text x={70} y={50} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-A [RIDGE]
       </text>
@@ -71,6 +73,7 @@ export const TacticalGrid: React.FC<TacticalGridProps> = ({ width = 800, height 
       <text x={width - 190} y={height - 25} fill="#71805A" fontSize="12" fontWeight="bold" letterSpacing="2">
         SECTOR 7-D [CANYON]
       </text>
+      </>}
     </g>
   );
 };

@@ -9,6 +9,8 @@ import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { SecondaryButton } from "@/components/ui/SecondaryButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { SharedAAR } from "@/components/integration/SharedAAR";
+import { TrainingExampleNotice } from "@/components/integration/TrainingExampleNotice";
 import {
   ArrowLeft,
   Download,
@@ -266,6 +268,7 @@ function SectionToggle({
   return (
     <button
       onClick={onToggle}
+      aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
       className="flex items-center gap-2 text-[9px] font-black tracking-widest text-[#A0A59E] hover:text-[#687066] transition-colors"
     >
       {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -283,6 +286,11 @@ interface PageProps {
 
 export default function AARPage({ params }: PageProps) {
   const { id } = use(params);
+  if (!Object.prototype.hasOwnProperty.call(MOCK_AAR, id.toLowerCase())) return <SharedAAR key={id} id={id} />;
+  return <SampleAARPage id={id} />;
+}
+
+function SampleAARPage({ id }: { id: string }) {
   const { addToast } = useToast();
 
   const aar =
@@ -302,6 +310,7 @@ export default function AARPage({ params }: PageProps) {
 
   return (
     <AppShell pageTitle={`AAR — ${aar.exerciseId}`} role="instructor">
+      <TrainingExampleNotice />
 
       {/* ── PAGE HEADER ── */}
       <PageHeader

@@ -25,6 +25,13 @@ export function getAuthErrorMessage(code: string): string {
       return "This email address is already in use.";
     case "auth/invalid-email":
       return "Please enter a valid email address.";
+    case "auth/invalid-credential":
+      return "The email or password is incorrect. Please try again.";
+    case "auth/weak-password":
+    case "auth/password-does-not-meet-requirements":
+      return "Choose a stronger password that meets your account password requirements.";
+    case "auth/invalid-api-key":
+      return "Firebase configuration is invalid. Please check the frontend environment settings.";
     case "auth/wrong-password":
       return "Incorrect password. Please try again.";
     case "auth/user-not-found":

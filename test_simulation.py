@@ -1,6 +1,7 @@
 """Real running-server smoke test. Run after scripts/start-backend.ps1."""
 
 import json
+import time
 import urllib.request
 import uuid
 
@@ -108,6 +109,78 @@ def main():
             assert exported["exerciseId"] == exercise_id
             print(
                 "PASS: running HTTP server, two real WebSocket clients, delayed/drop delivery, hidden data, decision snapshot and final JSON AAR"
+            )
+    finally:
+        request(path + "/end", {}, key)
+    verify_scheduled_demo()
+
+
+def verify_scheduled_demo():
+    """Observe the entire scheduled exercise over a real socket, at 10x speed."""
+    room = request(
+        "/exercises/start",
+        {"teamName": "Automatic timeline verification", "speedMultiplier": 10},
+    )
+    exercise_id, key = room["exerciseId"], room["instructorKey"]
+    path = f"/exercises/{exercise_id}"
+    expected = {
+        "EXERCISE_STARTED": 0,
+        "RADIO_DELAY": 20,
+        "CONFLICTING_REPORT": 40,
+        "MAP_OUTDATED": 60,
+        "RADIO_DROPOUT": 80,
+        "NEW_INTELLIGENCE": 100,
+        "DECISION_REQUIRED": 110,
+        "EXERCISE_ENDED": 120,
+    }
+    observed = {}
+    recorded = False
+    try:
+        with connect(f"ws://127.0.0.1:8000/ws/exercises/{exercise_id}") as commander:
+            commander.send(
+                json.dumps(
+                    {
+                        "type": "JOIN_EXERCISE",
+                        "role": "COMMANDER",
+                        "name": "Timeline Commander",
+                    }
+                )
+            )
+            receive(commander, "JOINED")
+            deadline = time.monotonic() + 25
+            while time.monotonic() < deadline:
+                packet = json.loads(commander.recv(timeout=5))
+                if packet["type"] != "STATE_UPDATE":
+                    continue
+                state = packet["state"]
+                for event in state["eventLog"]:
+                    if event["type"] in expected:
+                        observed[event["type"]] = event["second"]
+                if state["activeDecisionPoint"] and not recorded:
+                    request(
+                        path + "/decision",
+                        {
+                            "decision": "Hold and verify",
+                            "rationale": "Conflicting reports and stale map require independent confirmation.",
+                            "confidence": "MEDIUM",
+                        },
+                    )
+                    recorded = True
+                if state["status"] == "completed":
+                    break
+            else:
+                raise AssertionError("Scheduled demo did not finish within its timeout")
+            assert observed == expected, (observed, expected)
+            assert recorded and state["elapsedSeconds"] == 120
+            assert (
+                state["commsStatus"] == "offline" and state["mapStatus"] == "outdated"
+            )
+            assert len(state["reports"]) == 3
+            aar = request(path + "/aar")
+            assert aar["isFinal"] and aar["stats"]["decisionsCount"] == 1
+            assert aar["decisions"][0]["confidence"] == "medium"
+            print(
+                "PASS: real scheduler and WebSocket observed all eight exact timeline events, automatic completion, intelligence and recorded decision at 10x speed"
             )
     finally:
         request(path + "/end", {}, key)

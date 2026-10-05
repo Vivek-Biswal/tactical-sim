@@ -1,6 +1,8 @@
+> Current policy: every signed-in user can create a room as Instructor and join another as Trainee. Legacy account-role claims are ignored. See [room roles](room-roles.md). Earlier account-provisioning descriptions below are superseded.
+
 # Shared simulation backend
 
-FastAPI owns each exercise's clock, events, communication queues, movement, map snapshots and decision records. The root Next.js app connects at /training. This is a local in-memory prototype, with a two-minute demonstration and a 15-minute training mode. No real military data, weapon effects, combat scoring or tactical correctness claims are included.
+FastAPI owns each shared exercise's clock, events, communication queues, movement, map snapshots and decision records. The root Next.js app connects at /training. Storage uses memory by default, with optional Firestore checkpoints, a two-minute demonstration and a 15-minute training mode. Firebase account authorization is enabled by default. No real military data, weapon effects, combat scoring or tactical correctness claims are included. See the [integration API reference](backend-api.md) for request/response examples, [account-role setup](account-roles.md) for Instructor provisioning, and the [Varun completion checklist](varun-backend-completion.md) for work-file coverage.
 
 ## Run on Windows
 
@@ -21,7 +23,9 @@ Run these in two terminals:
 npm run dev -- --port 3100
 ```
 
-Open http://localhost:3100/training. Create a room, choose a callsign and connect as Instructor. Press Start. Open the participant link in other browser tabs or browsers, choose Commander / Team Alpha / Team Bravo, and connect. Participant links never include the instructor key. The key is saved under a versioned localStorage entry in the room creator's browser; enter it in the instructor join form when using a different browser. Instructor commands do not depend on the frontend's Firebase/demo login.
+Configure the frontend's Firebase browser environment and sign in with a provisioned Instructor account. Open http://localhost:3100/training, create a room and connect as Instructor, then press Start. Open the participant link in separate signed-in Commander or Team account browsers and connect with the role permitted by each account. Participant links never include the instructor key. The key is saved under a versioned localStorage entry in the creator's browser; using it elsewhere additionally requires signing in as the same creator account. New accounts without a signed role claim receive Commander access; they cannot promote themselves through a role selector.
+
+For a deliberate local prototype/test session only, set `$env:AUTH_MODE = "demo"` before starting that backend process. Production defaults to Firebase authorization, and demo authentication is refused in known deployed environments. Two-minute `isDemoMode` scenarios do not disable account authorization. A frontend demo session alone does not bypass a Firebase-mode backend.
 
 The backend binds only to 127.0.0.1 by default. For a LAN demonstration, run ./scripts/start-backend.ps1 -BindAddress 0.0.0.0 and configure the following before starting/building the frontend:
 
@@ -55,7 +59,7 @@ CURRENT mirrors authoritative units and activities. OUTDATED freezes both, inclu
 
 Trainee HTTP/WebSocket state excludes trueUnits and queued/dropped message bodies. Pending messages expose metadata and delivery countdowns. Instructor state may include trueUnits. Decision snapshots are taken by the server: received report IDs, available/unavailable information, radio/map condition and the displayed positions. Clients cannot submit their own information snapshots.
 
-Each room has an independent key, event log and message queue. AAR endpoints return 404 for unknown rooms; they never manufacture completed exercises or decisions. Full AAR is instructor-only during an exercise and available to participants after completion. JSON contains the full event and delivery timeline, decision rationale/confidence, snapshots, initial units and factual metrics. CSV exports decisions with information context; formula-like values are escaped.
+Each room has an independent creator, key, event log and message queue. AAR endpoints return 404 for unknown rooms; they never manufacture completed exercises or decisions. Live AAR preview requires the creator's Instructor account and room key. After completion, authenticated fixed room members receive the full educational debrief, including missed/dropped transmissions and previously concealed events, so they can compare what they knew with what they missed. Those bodies/events remain hidden from active trainee state. Final AAR without fixed room membership returns 403. JSON contains the timeline, rationale/confidence, snapshots, initial units and factual metrics. CSV exports decisions with information context; formula-like values are escaped.
 
 ## HTTP contract
 
@@ -63,12 +67,14 @@ Swagger: http://localhost:8000/docs. All endpoints below have /api prefix.
 
 | Endpoint | Purpose |
 | --- | --- |
-| GET /health | Health and in-memory room count |
+| GET /health | Health, storage mode, checkpoint status and loaded room count |
 | GET /scenarios, /scenarios/{id} | Built-in scenario catalog |
+| GET /scenarios/training-areas | Shared India training-area catalog |
 | POST /exercises | Create a pending room; returns instructorKey once |
 | POST /exercises/start | Create and immediately start |
 | GET /exercises, /exercises/{id} | Room list / trainee state |
-| POST /exercises/{id}/control | start, pause, resume, end, reset, set_speed |
+| GET /exercises/{id}/membership | Requesting account's assigned room role or null |
+| POST /exercises/{id}/control | start, pause, resume, end, reset, set_speed, set_training_area |
 | POST /exercises/{id}/inject | Instructor action plus payload |
 | POST /exercises/{id}/event | Uppercase scenario event type plus payload |
 | POST /exercises/{id}/messages | Participant radio message |
@@ -79,7 +85,7 @@ Swagger: http://localhost:8000/docs. All endpoints below have /api prefix.
 | GET /exercises/{id}/aar | Actual AAR |
 | GET /exercises/{id}/aar/export?format=json or csv | Download report |
 
-Instructor controls/injects/events and privileged state/AAR requests require X-Instructor-Key. Mutations are validated and return 409 for invalid exercise transitions, 422 for invalid payloads, 403 for an absent/wrong key and 404 for unknown rooms. Reset requires a paused, pending or completed room, retains the room key, and clears that exercise's records.
+Exercise endpoints require Authorization: Bearer with a verified Firebase ID token. Instructor controls/injects/events and privileged state/AAR requests additionally require the signed Instructor role, creator identity and X-Instructor-Key. State and decision reads require fixed membership (403 otherwise); participant movement/radio/decision commands require a prior JOIN (409 otherwise). REST requests never create memberships. Missing/expired/invalid tokens return 401, role/creator/key violations return 403, invalid exercise transitions return 409, invalid payloads return 422 and unknown rooms return 404. Reset requires a paused, pending or completed room, retains the creator, memberships and room key, and clears that exercise's history.
 
 State keeps the existing frontend's lower-case status/commsStatus/mapStatus and ExerciseState names. Compatibility fields elapsedTime, radioStatus (uppercase), radioDelay, teams, reports and currentEvent are also provided.
 
@@ -88,10 +94,10 @@ State keeps the existing frontend's lower-case status/commsStatus/mapStatus and 
 Connect to /ws/exercises/{exerciseId}; /ws/exercise/{exerciseId} is an alias. Send JOIN within ten seconds:
 
 ```json
-{"type":"JOIN","role":"TEAM_ALPHA","name":"Alpha"}
+{"type":"JOIN","role":"TEAM_ALPHA","name":"Alpha","idToken":"<fresh Team-account ID token>"}
 ```
 
-Instructor JOIN also includes instructorKey. Receive JOINED, followed by STATE_UPDATE. Each client receives a filtered state and connectedTrainees. Commands use a unique requestId:
+Instructor JOIN also includes instructorKey and must use the creator's Instructor-account token. In Firebase mode, names derive from the account, and Team Alpha/Bravo/Charlie becomes fixed on first join. Receive JOINED, followed by STATE_UPDATE. Each client receives a filtered state and connectedTrainees. Commands use a unique requestId:
 
 ```json
 {"type":"RADIO_MESSAGE","requestId":"example-1","payload":{"content":"Checkpoint reached"}}
@@ -107,15 +113,25 @@ The frontend disables controls when disconnected, marks its retained map as outd
 
 ## Limits and verification
 
-Participant identity/roles are self-selected in this prototype; this is not production identity authorization. REST participant endpoints support local integration without participant tokens. Instructor keys protect privileged operations independently. Firebase auth is not connected to backend permissions.
+### Slow initial connection
 
-Records are not durable: restarting the server clears rooms. Completed/pending unconnected rooms expire after 24 hours. Limits: 128 rooms, 32 connected participants per room, 1000 messages, 200 decisions and 5000 log records for participant/inject commands. Export before reset, expiry or restart. End remains available at the record limit.
+The shared-exercise lobby allows up to 90 seconds for its first room-list request, to accommodate a hosted backend starting after inactivity. After five seconds it displays a startup hint. If the request fails, use **Retry connection**; room creation remains disabled until a successful room-list response. Local practice is available separately.
+
+Other API requests have a 15-second deadline and readable timeout/network/startup errors. Requests that change state are never automatically retried: a timeout can occur after a room was created or a decision accepted, so inspect the server records before submitting again. Leaving the page cancels the connection request without surfacing a failure.
+
+Run `node scripts/verify-backend-connection.cjs` for timeout, cancellation, transient-server errors, invalid responses, and mutation replay safeguards.
+
+Signed account claims authorize REST/socket participants; client role choices cannot grant instructor access. Commander and Team accounts JOIN before accessing state/decisions or submitting HTTP commands. Team accounts command only their own team; Commander accounts submit decisions. Completed rooms reject new memberships, while existing members and the creator can reconnect. Reset retains these memberships and allows new first joins to the pending exercise. Socket close 4001 requires a refreshed ID token before reconnect; 1008 indicates failed access policy. Token revocation/live-disabled status is not checked, so an already issued token retains its role until expiry. See [account roles](account-roles.md) for provisioning and operational limits.
+
+In memory mode, restarting the server clears rooms. Optional Firestore checkpoints restore saved rooms and AAR data; explicit Firestore configuration requires backend credentials, and a running restored room resumes as paused. Checkpoint acknowledgement is asynchronous, so abrupt termination can lose changes after the last successful write. See [Firestore setup](firestore.md). Run one backend worker and one service instance in either mode.
+
+Completed/pending unconnected rooms leave memory after 24 hours; this does not delete Firestore records. Limits: 128 loaded rooms, 32 connected participants per room, 1000 messages, 200 decisions and 5000 log records for participant/inject commands. Export before reset, expiry or restart. End remains available at the record limit.
 
 ```powershell
 ./scripts/test-backend.ps1
 node scripts/verify-offline-simulation.cjs
 node scripts/verify-tactical-map.cjs
-backend/.venv/Scripts/python.exe test_simulation.py # real HTTP + WebSocket check, backend running
+backend/.venv/Scripts/python.exe test_simulation.py # local demo transport harness; backend must explicitly use AUTH_MODE=demo
 npx tsc --noEmit
 npm run build
 ```

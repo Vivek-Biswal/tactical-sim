@@ -35,6 +35,10 @@ Thumbs.db
 # Local deployment metadata and design references
 .vercel/
 .design-reference/
+.firebase/
+firebase-debug*.log
+firestore-debug*.log
+*service-account*.json
 
 # Generated Cesium browser distribution (prepared from pinned npm dependency)
 /public/cesium/

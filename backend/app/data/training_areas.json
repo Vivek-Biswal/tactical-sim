@@ -1,0 +1,868 @@
+[
+  {
+    "id": "nilgiri-demo",
+    "name": "Nilgiri Hills",
+    "region": "Tamil Nadu",
+    "terrain": "hills",
+    "latitude": 11.42,
+    "longitude": 76.7,
+    "widthMeters": 8000,
+    "heightMeters": 6000,
+    "description": "Rolling hills, wooded slopes and winding routes.",
+    "learningGoal": "Keep teams coordinated when hills interrupt radio contact.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/tamil-nadu/ooty"
+  },
+  {
+    "id": "auli-mountains",
+    "name": "Auli Mountains",
+    "region": "Uttarakhand",
+    "terrain": "mountain",
+    "latitude": 30.53,
+    "longitude": 79.57,
+    "widthMeters": 10000,
+    "heightMeters": 7500,
+    "description": "High Himalayan slopes and steep mountain terrain.",
+    "learningGoal": "Practise observation, team movement and aerial support with incomplete reports.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/uttarakhand/badrinath/auli"
+  },
+  {
+    "id": "aravalli-ranges",
+    "name": "Aravalli Ranges",
+    "region": "Rajasthan",
+    "terrain": "range",
+    "latitude": 24.62,
+    "longitude": 72.75,
+    "widthMeters": 12000,
+    "heightMeters": 9000,
+    "description": "Connected ridges around Mount Abu.",
+    "learningGoal": "Coordinate movement between ridges while comparing conflicting information.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/rajasthan"
+  },
+  {
+    "id": "spiti-valley",
+    "name": "Spiti Valley",
+    "region": "Himachal Pradesh",
+    "terrain": "valley",
+    "latitude": 32.23,
+    "longitude": 78.07,
+    "widthMeters": 12000,
+    "heightMeters": 9000,
+    "description": "An open valley surrounded by rugged mountain slopes.",
+    "learningGoal": "Maintain a shared picture across separated teams and aerial observers.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.prod.incredibleindia.gov.in/content/incredible-india-v2/en/destinations/spiti-valley.html"
+  },
+  {
+    "id": "barren-volcano",
+    "name": "Barren Island Volcano",
+    "region": "Andaman & Nicobar Islands",
+    "terrain": "volcano",
+    "latitude": 12.278,
+    "longitude": 93.858,
+    "widthMeters": 10000,
+    "heightMeters": 7500,
+    "description": "A volcanic island surrounded by the Andaman Sea.",
+    "learningGoal": "Coordinate simulated offshore observation and aerial monitoring.",
+    "defaultForce": "joint",
+    "supportedForces": [
+      "navy",
+      "air_force",
+      "joint"
+    ],
+    "surface": "island",
+    "landPolygons": [
+      [
+        {
+          "x": 270,
+          "y": 210
+        },
+        {
+          "x": 390,
+          "y": 150
+        },
+        {
+          "x": 520,
+          "y": 220
+        },
+        {
+          "x": 540,
+          "y": 350
+        },
+        {
+          "x": 410,
+          "y": 440
+        },
+        {
+          "x": 260,
+          "y": 370
+        }
+      ]
+    ],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 490
+        },
+        {
+          "x": 650,
+          "y": 490
+        },
+        {
+          "x": 650,
+          "y": 100
+        },
+        {
+          "x": 100,
+          "y": 100
+        }
+      ]
+    },
+    "sourceUrl": "https://tourism.andamannicobar.gov.in/userpages/admin/docuploads/1762838142_Heritage%20Site.pdf"
+  },
+  {
+    "id": "kochi-sea",
+    "name": "Arabian Sea Coast",
+    "region": "Kerala \u00b7 near Kochi",
+    "terrain": "sea",
+    "latitude": 9.95,
+    "longitude": 76.195,
+    "widthMeters": 12000,
+    "heightMeters": 9000,
+    "description": "Coastal water with a shore-side coordination area.",
+    "learningGoal": "Practise ship-to-shore reports and aircraft coordination when communications fail.",
+    "defaultForce": "navy",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "navy",
+      "joint"
+    ],
+    "surface": "coast",
+    "landPolygons": [
+      [
+        {
+          "x": 620,
+          "y": 0
+        },
+        {
+          "x": 800,
+          "y": 0
+        },
+        {
+          "x": 800,
+          "y": 600
+        },
+        {
+          "x": 620,
+          "y": 600
+        }
+      ]
+    ],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 660,
+          "y": 450
+        },
+        {
+          "x": 720,
+          "y": 380
+        },
+        {
+          "x": 740,
+          "y": 220
+        },
+        {
+          "x": 650,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/kerala/kochi"
+  },
+  {
+    "id": "brahmaputra-river",
+    "name": "Brahmaputra River",
+    "region": "Assam \u00b7 near Guwahati",
+    "terrain": "river",
+    "latitude": 26.2,
+    "longitude": 91.72,
+    "widthMeters": 10000,
+    "heightMeters": 7500,
+    "description": "A broad river with banks on either side.",
+    "learningGoal": "Coordinate simulated river boats, bank teams and aerial observers.",
+    "defaultForce": "joint",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "navy",
+      "joint"
+    ],
+    "surface": "river",
+    "landPolygons": [],
+    "waterPolygons": [
+      [
+        {
+          "x": 0,
+          "y": 220
+        },
+        {
+          "x": 800,
+          "y": 220
+        },
+        {
+          "x": 800,
+          "y": 380
+        },
+        {
+          "x": 0,
+          "y": 380
+        }
+      ]
+    ],
+    "routes": {
+      "ground": [
+        {
+          "x": 100,
+          "y": 480
+        },
+        {
+          "x": 330,
+          "y": 480
+        },
+        {
+          "x": 600,
+          "y": 480
+        },
+        {
+          "x": 650,
+          "y": 530
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 120,
+          "y": 300
+        },
+        {
+          "x": 350,
+          "y": 300
+        },
+        {
+          "x": 650,
+          "y": 300
+        },
+        {
+          "x": 500,
+          "y": 280
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/assam/guwahati"
+  },
+  {
+    "id": "chilika-lake",
+    "name": "Chilika Lake",
+    "region": "Odisha",
+    "terrain": "lake",
+    "latitude": 19.72,
+    "longitude": 85.35,
+    "widthMeters": 16000,
+    "heightMeters": 12000,
+    "description": "A coastal lagoon with broad water and shoreline areas.",
+    "learningGoal": "Practise boat coordination and shoreline observation under delayed information.",
+    "defaultForce": "navy",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "navy",
+      "joint"
+    ],
+    "surface": "lake",
+    "landPolygons": [],
+    "waterPolygons": [
+      [
+        {
+          "x": 300,
+          "y": 100
+        },
+        {
+          "x": 550,
+          "y": 100
+        },
+        {
+          "x": 670,
+          "y": 220
+        },
+        {
+          "x": 700,
+          "y": 400
+        },
+        {
+          "x": 570,
+          "y": 520
+        },
+        {
+          "x": 300,
+          "y": 530
+        },
+        {
+          "x": 190,
+          "y": 370
+        },
+        {
+          "x": 210,
+          "y": 220
+        }
+      ]
+    ],
+    "routes": {
+      "ground": [
+        {
+          "x": 50,
+          "y": 130
+        },
+        {
+          "x": 120,
+          "y": 210
+        },
+        {
+          "x": 100,
+          "y": 430
+        },
+        {
+          "x": 40,
+          "y": 500
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 300,
+          "y": 350
+        },
+        {
+          "x": 440,
+          "y": 380
+        },
+        {
+          "x": 530,
+          "y": 300
+        },
+        {
+          "x": 440,
+          "y": 220
+        }
+      ]
+    },
+    "sourceUrl": "https://www.chilika.com/"
+  },
+  {
+    "id": "thar-desert",
+    "name": "Thar Desert",
+    "region": "Rajasthan \u00b7 near Jaisalmer",
+    "terrain": "desert",
+    "latitude": 26.87,
+    "longitude": 70.6,
+    "widthMeters": 12000,
+    "heightMeters": 9000,
+    "description": "Open sandy terrain with dunes and limited landmarks.",
+    "learningGoal": "Use simple route references and aerial observation when map updates fail.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/rajasthan/jaisalmer"
+  },
+  {
+    "id": "western-ghats-forest",
+    "name": "Western Ghats Forest",
+    "region": "Kerala \u00b7 near Munnar",
+    "terrain": "forest",
+    "latitude": 10.09,
+    "longitude": 77.07,
+    "widthMeters": 10000,
+    "heightMeters": 7500,
+    "description": "Forested slopes, hills and small clearings.",
+    "learningGoal": "Compare ground and aerial reports when trees limit visibility.",
+    "defaultForce": "army",
+    "supportedForces": [
+      "army",
+      "air_force",
+      "joint"
+    ],
+    "surface": "land",
+    "landPolygons": [],
+    "waterPolygons": [],
+    "routes": {
+      "ground": [
+        {
+          "x": 140,
+          "y": 450
+        },
+        {
+          "x": 300,
+          "y": 380
+        },
+        {
+          "x": 320,
+          "y": 200
+        },
+        {
+          "x": 120,
+          "y": 260
+        }
+      ],
+      "air": [
+        {
+          "x": 180,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 150
+        },
+        {
+          "x": 600,
+          "y": 450
+        },
+        {
+          "x": 180,
+          "y": 450
+        }
+      ],
+      "sea": [
+        {
+          "x": 100,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 450
+        },
+        {
+          "x": 350,
+          "y": 180
+        },
+        {
+          "x": 100,
+          "y": 180
+        }
+      ]
+    },
+    "sourceUrl": "https://www.incredibleindia.gov.in/en/kerala/munnar"
+  }
+]

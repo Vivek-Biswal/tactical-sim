@@ -8,6 +8,14 @@ from copy import deepcopy
 
 from app.config import settings
 from app.scenario_engine.events import TITLES, get_operation_silent_link
+from app.scenario_engine.training import (
+    heading_to,
+    initial_training_activities,
+    initial_training_units,
+    is_dynamic_area,
+    preset_for,
+    route_allows,
+)
 from app.schemas.models import EventPayload, MovementInput, TrainingArea
 
 INJECT_TYPES = {
@@ -46,7 +54,24 @@ class ExerciseSession:
         self.training_area = TrainingArea.model_validate(
             training_area or {}
         ).model_dump()
-        self.scenario = scenario or get_operation_silent_link(is_demo)
+        self.scenario = (
+            deepcopy(scenario) if scenario else get_operation_silent_link(is_demo)
+        )
+        if is_dynamic_area(self.training_area):
+            self.scenario["initialUnits"] = initial_training_units(self.training_area)
+            self.scenario["operationalArea"] = self.training_area["name"]
+            for event in self.scenario["events"]:
+                if event["type"] == "CONFLICTING_REPORT":
+                    event["payload"] = {
+                        "reportA": "Alpha observer reports activity near observation point 1.",
+                        "reportB": "The relay reports activity near observation point 2. The first report is unconfirmed.",
+                        "reliability": "unverified",
+                    }
+                elif event["type"] == "NEW_INTELLIGENCE":
+                    event["payload"] = {
+                        "content": "A new observation is reported. Its identity is not verified; compare the available reports.",
+                        "reliability": "medium",
+                    }
         self.team_name, self.is_demo = team_name, is_demo
         self.instructor_key = instructor_key or secrets.token_urlsafe(32)
         self.created_at = time.time()
@@ -67,6 +92,8 @@ class ExerciseSession:
                 "status": "active",
             }
         ]
+        if is_dynamic_area(self.training_area):
+            self.activities = initial_training_activities(self.training_area)
         self.reported_units, self.reported_activities = (
             deepcopy(self.units),
             deepcopy(self.activities),
@@ -76,6 +103,31 @@ class ExerciseSession:
         self.triggered_event_ids = set()
         self.active_decision = None
         self.broadcast_cursor, self.revision = 0, 0
+
+    def set_training_area(self, area):
+        if self.status != "pending":
+            raise ValueError("Choose the training area before starting the exercise")
+        configured = ExerciseSession(
+            self.exercise_id,
+            team_name=self.team_name,
+            is_demo=self.is_demo,
+            instructor_key=self.instructor_key,
+            training_area=area,
+        )
+        for field in (
+            "training_area",
+            "scenario",
+            "total_duration",
+            "units",
+            "activities",
+            "reported_units",
+            "reported_activities",
+            "movements",
+        ):
+            setattr(self, field, getattr(configured, field))
+        self.log_event(
+            "TRAINING_AREA_CHANGED", payload={"trainingArea": self.training_area}
+        )
 
     def require_running(self):
         if self.status != "running":
@@ -202,6 +254,8 @@ class ExerciseSession:
             "revision": self.revision,
         }
         result["teams"] = deepcopy(result["units"])
+        # Retain the map integration name from the original work-file contract.
+        result["activities"] = deepcopy(result["activityMarkers"])
         if instructor:
             result["trueUnits"] = deepcopy(self.units)
         return result
@@ -303,22 +357,40 @@ class ExerciseSession:
             dx, dy = order["x"] - unit["x"], order["y"] - unit["y"]
             speed = order.get("speed", 8)
             distance, step = math.hypot(dx, dy), speed * delta
-            unit["heading"] = math.degrees(math.atan2(dy, dx)) % 360
-            if distance <= step:
+            unit["heading"] = heading_to(unit, order)
+            if distance <= step + 1e-8:
                 unit.update(x=order["x"], y=order["y"], status="operational")
                 unit.pop("destination", None)
                 del self.movements[unit["id"]]
                 # Arrival time is interpolated inside this segment.
                 previous = self.elapsed_seconds
                 self.elapsed_seconds += distance / speed
-                self.log_event(
-                    "TEAM_ARRIVED",
-                    payload={"unitId": unit["id"], "x": unit["x"], "y": unit["y"]},
-                )
+                if not order.get("patrol"):
+                    self.log_event(
+                        "TEAM_ARRIVED",
+                        payload={"unitId": unit["id"], "x": unit["x"], "y": unit["y"]},
+                    )
+                elif unit.get("patrolRoute"):
+                    route = unit["patrolRoute"]
+                    unit["patrolIndex"] = (unit["patrolIndex"] + 1) % len(route)
+                    self.begin_patrol(unit)
                 self.elapsed_seconds = previous
             elif distance:
                 unit["x"] += dx / distance * step
                 unit["y"] += dy / distance * step
+
+    def begin_patrol(self, unit):
+        route = unit.get("patrolRoute")
+        if not route:
+            return
+        target = route[unit["patrolIndex"]]
+        order = {
+            **target,
+            "speed": unit["speedGridPerSecond"],
+            "patrol": True,
+        }
+        self.movements[unit["id"]] = order
+        unit.update(destination=deepcopy(target), status="moving")
 
     def move_team(self, command, source="commander"):
         self.require_running()
@@ -329,9 +401,23 @@ class ExerciseSession:
         unit = next((u for u in self.units if u["id"] == command.unitId), None)
         if not unit or unit["faction"] != "friendly":
             raise ValueError("Friendly team not found")
+        domain = unit.get("domain", "ground")
+        if is_dynamic_area(self.training_area) and not route_allows(
+            self.training_area, domain, unit, command.model_dump()
+        ):
+            raise ValueError(
+                "Ground teams must stay on land; choose a route that avoids water"
+                if domain == "ground"
+                else "Boats must stay on water; choose a route that avoids land"
+            )
         order = {"x": command.x, "y": command.y}
+        if is_dynamic_area(self.training_area):
+            order["speed"] = unit["speedGridPerSecond"]
+            # A direct instructor/trainee order replaces the automatic patrol.
+            unit.pop("patrolRoute", None)
+            unit.pop("patrolIndex", None)
         self.movements[unit["id"]] = order
-        unit.update(destination=order, status="moving")
+        unit.update(destination={"x": command.x, "y": command.y}, status="moving")
         self.log_event("TEAM_MOVEMENT", payload=command.model_dump(), source=source)
         self.sync_map()
 
@@ -345,19 +431,24 @@ class ExerciseSession:
             self.end()
             return
         if kind == "EXERCISE_STARTED":
-            self.movements = {
-                "unit-alpha": {"x": 650, "y": 240, "speed": 2},
-                "unit-bravo": {"x": 550, "y": 350, "speed": 2},
-            }
-            for unit in self.units:
-                unit.update(
-                    destination={
-                        k: v
-                        for k, v in self.movements[unit["id"]].items()
-                        if k != "speed"
-                    },
-                    status="moving",
-                )
+            if is_dynamic_area(self.training_area):
+                for unit in self.units:
+                    self.begin_patrol(unit)
+            else:
+                self.movements = {
+                    "unit-alpha": {"x": 650, "y": 240, "speed": 2},
+                    "unit-bravo": {"x": 550, "y": 350, "speed": 2},
+                }
+                for unit in self.units:
+                    if unit["id"] in self.movements:
+                        unit.update(
+                            destination={
+                                k: v
+                                for k, v in self.movements[unit["id"]].items()
+                                if k != "speed"
+                            },
+                            status="moving",
+                        )
         elif kind == "UAV_DEPLOYED":
             if any(u["id"] == "unit-uav" for u in self.units):
                 raise ValueError("The simulated UAV is already deployed")
@@ -368,6 +459,7 @@ class ExerciseSession:
                     "callsign": "UAV-1",
                     "role": "Simulated aerial observer",
                     "type": "UAV",
+                    "domain": "air",
                     "faction": "friendly",
                     "x": 400,
                     "y": 300,
@@ -377,8 +469,24 @@ class ExerciseSession:
                 }
             )
             # The existing movement loop, clock and stale-feed policy handle this unit.
-            if self.status == "running":
-                self.move_team({"unitId": "unit-uav", "x": 600, "y": 120}, "instructor")
+            uav = self.units[-1]
+            if is_dynamic_area(self.training_area):
+                uav.update(
+                    patrolRoute=deepcopy(
+                        preset_for(self.training_area)["routes"]["air"]
+                    ),
+                    patrolIndex=0,
+                    speedGridPerSecond=12,
+                )
+                self.begin_patrol(uav)
+            else:
+                if self.status == "running":
+                    self.move_team(
+                        {"unitId": "unit-uav", "x": 600, "y": 120}, "instructor"
+                    )
+                elif self.status == "paused":
+                    self.movements[uav["id"]] = {"x": 600, "y": 120}
+                    uav.update(destination={"x": 600, "y": 120}, status="moving")
         elif kind == "RADIO_DELAY":
             self.comms_status, self.radio_delay_seconds = "delayed", values.delay
         elif kind == "RADIO_DROPOUT":
@@ -395,17 +503,40 @@ class ExerciseSession:
             }[kind]
         elif kind == "CONFLICTING_REPORT":
             group = uid()
-            for sender, role, content, x, y in [
+            observations = [
                 ("Alpha scout", "TEAM_ALPHA", values.reportA, 260, 210),
                 ("Intelligence relay", "INTELLIGENCE", values.reportB, 710, 320),
-            ]:
+            ]
+            if is_dynamic_area(self.training_area):
+                route = self.scenario["initialUnits"][0]["patrolRoute"]
+                observations = [
+                    (
+                        "Alpha observer",
+                        "TEAM_ALPHA",
+                        values.reportA,
+                        route[1]["x"],
+                        route[1]["y"],
+                    ),
+                    (
+                        "Observation relay",
+                        "INTELLIGENCE",
+                        values.reportB,
+                        route[2]["x"],
+                        route[2]["y"],
+                    ),
+                ]
+            for index, (sender, role, content, x, y) in enumerate(observations):
                 self.receive_report(sender, role, content, group)
                 self.activities.append(
                     {
                         "id": uid(),
-                        "label": "Western ridge — Alpha scout"
-                        if x == 260
-                        else "Eastern sector — intelligence",
+                        "label": f"Report {'A' if index == 0 else 'B'} — please verify"
+                        if is_dynamic_area(self.training_area)
+                        else (
+                            "Western ridge — Alpha scout"
+                            if index == 0
+                            else "Eastern sector — intelligence"
+                        ),
                         "x": x,
                         "y": y,
                         "type": "contact_warning",
@@ -414,13 +545,22 @@ class ExerciseSession:
                 )
         elif kind == "NEW_INTELLIGENCE":
             # Separate intelligence relay: radio blackout does not magically restore the radio.
-            self.receive_report("Intelligence relay", "INTELLIGENCE", values.content)
+            self.receive_report(
+                "Intelligence relay",
+                "INTELLIGENCE",
+                values.content,
+                reliability=values.reliability,
+            )
+            position = {"x": 560, "y": 180}
+            if is_dynamic_area(self.training_area):
+                position = self.scenario["initialUnits"][0]["patrolRoute"][3]
             self.activities.append(
                 {
                     "id": uid(),
-                    "label": "Sector 4 activity — medium reliability",
-                    "x": 560,
-                    "y": 180,
+                    "label": "New observation — please verify"
+                    if is_dynamic_area(self.training_area)
+                    else f"Sector 4 activity — {values.reliability} reliability",
+                    **position,
                     "type": "contact_warning",
                     "status": "unverified",
                 }
@@ -484,17 +624,25 @@ class ExerciseSession:
         self.require_capacity()
         if action == "custom_message":
             values = EventPayload.model_validate(payload or {})
-            self.receive_report(values.sender, "INSTRUCTOR", values.content)
+            self.receive_report(
+                values.sender,
+                "INSTRUCTOR",
+                values.content,
+                reliability=values.reliability,
+            )
         else:
             self.execute_event(INJECT_TYPES[action], payload, "instructor")
 
-    def receive_report(self, sender, role, content, conflict=None):
+    def receive_report(
+        self, sender, role, content, conflict=None, reliability="medium"
+    ):
         message = self.make_message(sender, role, content)
         message.update(
             isConflicting=bool(conflict),
             conflictGroupId=conflict,
             messageType="CONFLICTING_REPORT" if conflict else "INTEL_REPORT",
             channel="INTELLIGENCE_RELAY",
+            reliability="unverified" if conflict else reliability,
         )
         self.messages.append(message)
         self.deliver_message(len(self.messages) - 1)
@@ -564,7 +712,7 @@ class ExerciseSession:
                 "timestamp": self.elapsed_seconds,
                 "reliability": "unverified"
                 if message.get("isConflicting")
-                else "medium",
+                else message.get("reliability", "medium"),
                 "conflictGroupId": message.get("conflictGroupId"),
             }
         )

@@ -1,5 +1,8 @@
 import time
 
+from fastapi import HTTPException
+
+from app.auth import connection_identity, is_demo, require_actor_value
 from app.schemas.models import (
     ExerciseControl,
     InstructorInject,
@@ -7,7 +10,12 @@ from app.schemas.models import (
     RadioInput,
     TraineeDecisionInput,
 )
-from app.service import control, get_session
+from app.service import (
+    control,
+    get_session,
+    record_account_decision,
+    send_account_radio,
+)
 from app.websocket.manager import ws_manager
 
 
@@ -16,10 +24,16 @@ async def handle_websocket_message(connection, exercise_id, data):
     if not isinstance(kind, str):
         raise TypeError("Command type must be a string")
     kind = kind.upper()
+    if kind == "SEND_MESSAGE":
+        kind = "RADIO_MESSAGE"
     payload = data.get("payload", {})
+    if not isinstance(payload, dict):
+        raise TypeError("Command payload must be a JSON object")
     request_id = data.get("requestId")
     if not isinstance(request_id, str) or not 1 <= len(request_id) <= 80:
         raise ValueError("requestId is required (1–80 characters)")
+    session = get_session(exercise_id)
+    identity = connection_identity(session, connection)
     if request_id in connection["acks"]:
         await ws_manager.send(connection, connection["acks"][request_id])
         return
@@ -28,40 +42,41 @@ async def handle_websocket_message(connection, exercise_id, data):
     if len(connection["commands"]) >= 20:
         raise ValueError("Too many commands; wait a few seconds")
     connection["commands"].append(now)
-    session = get_session(exercise_id)
     session.advance_wallclock()
     role, name = connection["role"], connection["name"]
     if kind in ("INSTRUCTOR_INJECT", "EXERCISE_CONTROL") and role != "INSTRUCTOR":
-        raise ValueError("Instructor access required")
+        raise HTTPException(403, "Instructor access required")
     if kind == "RADIO_MESSAGE":
+        require_actor_value(identity, payload.get("sender"), payload.keys(), "sender")
+        if not is_demo() and "senderRole" in payload and payload["senderRole"] != role:
+            raise HTTPException(
+                403, "The message role must match the signed-in room role"
+            )
         command = RadioInput.model_validate(
             {
                 **payload,
                 "sender": name,
-                "senderRole": role if role != "INSTRUCTOR" else "COMMANDER",
+                "senderRole": role,
             }
         )
-        message = session.send_radio_message(name, role, command.content)
+        message = send_account_radio(session, identity, command)
         result = {
             "messageId": message["id"],
             "deliveryStatus": message["deliveryStatus"],
         }
     elif kind == "DECISION_SUBMIT":
         if role != "COMMANDER":
-            raise ValueError("Commander access required")
-        command = TraineeDecisionInput.model_validate({**payload, "traineeId": name})
-        decision = session.record_decision(
-            command.decision,
-            command.rationale,
-            command.confidence,
-            name,
-            command.selectedActionId,
+            raise HTTPException(403, "Commander access required")
+        require_actor_value(
+            identity, payload.get("traineeId"), payload.keys(), "traineeId"
         )
+        command = TraineeDecisionInput.model_validate({**payload, "traineeId": name})
+        decision = record_account_decision(session, identity, command)
         result = {"decisionId": decision["id"]}
     elif kind == "TEAM_MOVEMENT":
         command = MovementInput.model_validate(payload)
         if role.startswith("TEAM_") and command.unitId != "unit-" + role[5:].lower():
-            raise ValueError("Team members can move only their own team")
+            raise HTTPException(403, "Team members can move only their own team")
         session.move_team(
             command.model_dump(), "instructor" if role == "INSTRUCTOR" else "commander"
         )

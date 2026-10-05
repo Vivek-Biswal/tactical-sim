@@ -1,15 +1,24 @@
-import type { TrainingArea } from "../types/geography";
+import type { TrainingArea, TrainingPreset, ForceProfile } from "../types/geography";
+import catalog from "../../../backend/app/data/training_areas.json";
 import type { Point } from "./mapGeometry";
 import { MAP_WIDTH, MAP_HEIGHT } from "./mapGeometry";
-
-export const TRAINING_AREAS: readonly TrainingArea[] = [
-  { id: "nilgiri-demo", name: "Nilgiri hills — demo", latitude: 11.42, longitude: 76.70, widthMeters: 8000, heightMeters: 6000 },
-];
+export const TRAINING_PRESETS = catalog as TrainingPreset[];
+export const FORCE_LABELS: Record<ForceProfile, string> = { army: "Army · ground teams", air_force: "Air Force · aircraft", navy: "Navy · boats and ships", joint: "Joint · coordinated forces" };
+export function areaFromPreset(preset: TrainingPreset, forceProfile: ForceProfile = preset.defaultForce): TrainingArea {
+  const { id, name, latitude, longitude, widthMeters, heightMeters } = preset;
+  return { id, name, latitude, longitude, widthMeters, heightMeters, forceProfile };
+}
+export function getTrainingPreset(area: TrainingArea): TrainingPreset | undefined {
+  return TRAINING_PRESETS.find(preset => preset.id === area.id);
+}
+export const TRAINING_AREAS: readonly TrainingArea[] = TRAINING_PRESETS.map(preset => areaFromPreset(preset));
 export const DEFAULT_TRAINING_AREA = TRAINING_AREAS[0];
 const METERS_PER_DEGREE = 111319.49079327358;
 export interface GeoPoint { latitude: number; longitude: number }
-
 export function trainingAreaError(area: TrainingArea): string | null {
+  const preset = getTrainingPreset(area);
+  if (preset && area.forceProfile && !preset.supportedForces.includes(area.forceProfile)) return "Choose a training force supported by this terrain.";
+  if (preset && ["latitude", "longitude", "widthMeters", "heightMeters"].some(key => area[key as "latitude" | "longitude" | "widthMeters" | "heightMeters"] !== preset[key as "latitude" | "longitude" | "widthMeters" | "heightMeters"])) return "Select the location again to restore its training boundaries.";
   if (!area.name.trim() || area.name.length > 80) return "Enter an area name (up to 80 characters).";
   if (![area.latitude, area.longitude, area.widthMeters, area.heightMeters].every(Number.isFinite)) return "Enter valid coordinates and dimensions.";
   if (Math.abs(area.latitude) > 75 || Math.abs(area.longitude) > 180) return "Latitude must be between −75 and 75, longitude between −180 and 180.";

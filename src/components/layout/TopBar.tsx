@@ -1,46 +1,45 @@
 "use client";
 
-import React from "react";
-import { Menu, X, LogOut } from "lucide-react";
+import React, { useState } from "react";
+import Image from "next/image";
+import { Menu, X, LogOut, RefreshCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { accountRoleLabels } from "@/lib/roles";
 
 type RoleKey = "instructor" | "commander" | "team" | "admin";
 
-const roleLabels: Record<RoleKey, string> = {
-  instructor: "INSTRUCTOR",
-  commander:  "COMMANDER",
-  team:       "TEAM MEMBER",
-  admin:      "ADMIN",
-};
-
 interface TopBarProps {
   pageTitle: string;
+  /** Current workspace or server-resolved room role, used only as a display label. */
   role?: RoleKey;
   /** Mobile sidebar toggle */
   onMenuToggle?: () => void;
   mobileMenuOpen?: boolean;
 }
 
-export function TopBar({ pageTitle, role, onMenuToggle, mobileMenuOpen }: TopBarProps) {
-  const displayRole = role ? roleLabels[role] : "TRAINING";
-  const { user, logout } = useAuth();
+export function TopBar({ pageTitle, role: workspaceRole, onMenuToggle, mobileMenuOpen }: TopBarProps) {
+  const { user, logout, isFirebaseConfigured, refreshAccountAccess } = useAuth();
+  const displayRole = !isFirebaseConfigured ? "LOCAL PRACTICE" : workspaceRole && workspaceRole !== "admin" ? accountRoleLabels[workspaceRole].toUpperCase() : "TRAINING ACCOUNT";
+  const [leaving, setLeaving] = useState(false);
   const router = useRouter();
   const { addToast } = useToast();
 
   const handleLogout = async () => {
+    if (leaving) return;
+    setLeaving(true);
     try {
       await logout();
       addToast({
         variant: "info",
-        title: "Logged Out",
-        message: "You have securely left the training environment."
+        title: isFirebaseConfigured ? "Signed out" : "Practice closed",
+        message: isFirebaseConfigured ? "You have signed out of your account." : "You have left local practice."
       });
       router.push("/");
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {
+      addToast({ variant: "error", title: "Could not sign out", message: "Check your connection and try again." });
+    } finally { setLeaving(false); }
   };
 
   return (
@@ -68,17 +67,17 @@ export function TopBar({ pageTitle, role, onMenuToggle, mobileMenuOpen }: TopBar
         {/* System label — hidden on small screens */}
         <div className="hidden sm:flex items-center gap-2 text-[10px] font-bold tracking-widest text-[#71805A]">
           <span className="w-1.5 h-1.5 rounded-full bg-[#4A7A3A] animate-pulse" />
-          TRAINING SYSTEM
+          {isFirebaseConfigured ? "TRAINING SYSTEM" : "LOCAL PRACTICE"}
         </div>
 
         {/* Divider */}
         <div className="hidden sm:block w-px h-5 bg-[#D9D8CE]" />
 
         {/* Role badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F5EE] border border-[#D9D8CE] rounded">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F5EE] border border-[#D9D8CE] rounded" aria-label={isFirebaseConfigured ? `Workspace: ${displayRole}` : "Local practice; no authenticated account"}>
           <div className="w-6 h-6 rounded bg-[#556B3F] flex items-center justify-center flex-shrink-0">
             {user && user.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-full h-full rounded object-cover" />
+              <Image src={user.photoURL} alt="Profile" width={24} height={24} unoptimized className="w-full h-full rounded object-cover" />
             ) : (
               <span className="text-white font-black text-[10px]">
                 {displayRole.charAt(0)}
@@ -95,11 +94,18 @@ export function TopBar({ pageTitle, role, onMenuToggle, mobileMenuOpen }: TopBar
           </div>
         </div>
 
+        {isFirebaseConfigured && user && <button type="button" onClick={async () => {
+          try { await refreshAccountAccess(); }
+          catch (error) { addToast({ variant: "error", title: "Could not refresh access", message: error instanceof Error ? error.message : "Please try again." }); }
+        }} className="flex h-8 w-8 items-center justify-center rounded text-[#687066] hover:bg-[#F0EEE7] hover:text-[#556B3F]" title="Refresh your sign-in session" aria-label="Refresh account access"><RefreshCw size={16} /></button>}
+
         {/* Logout Button */}
         <button
           onClick={handleLogout}
+          disabled={leaving}
           className="flex items-center justify-center w-8 h-8 rounded text-[#687066] hover:bg-[#F0EEE7] hover:text-[#A94A3F] transition-colors"
-          title="Secure Logout"
+          title={isFirebaseConfigured ? "Sign out" : "Leave local practice"}
+          aria-label={isFirebaseConfigured ? "Sign out" : "Leave local practice"}
         >
           <LogOut size={16} />
         </button>

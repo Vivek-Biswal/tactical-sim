@@ -1,13 +1,16 @@
 import unittest
 from copy import deepcopy
+from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from app.config import settings
 from app.main import app
 from app.scenario_engine.engine import ExerciseSession, engine_manager
 from app.schemas.models import ExerciseControl, TrainingArea
 from app.service import control
 from app.websocket.manager import ws_manager
-from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 AREA = {
     "id": "custom",
@@ -95,7 +98,7 @@ class GeographyTests(unittest.TestCase):
     def test_http_and_websocket_share_instructor_selected_area(self):
         engine_manager.exercises.clear()
         ws_manager.active_connections.clear()
-        with TestClient(app) as client:
+        with patch.object(settings, "AUTH_MODE", "demo"), TestClient(app) as client:
             invalid = client.post(
                 "/api/exercises", json={"trainingArea": {**AREA, "longitude": 180}}
             )

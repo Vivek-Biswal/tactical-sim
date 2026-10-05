@@ -1,3 +1,4 @@
+import type { UnitDomain } from "./geography";
 export type CommsStatus = "normal" | "delayed" | "degraded" | "offline";
 export type MapStatus = "current" | "outdated" | "unavailable";
 
@@ -68,6 +69,10 @@ export interface TacticalUnit {
   heading?: number;
   /** UAV height above terrain; rendering metadata, not a new flight engine. */
   altitudeMeters?: number;
+  domain?: UnitDomain;
+  speedGridPerSecond?: number;
+  patrolRoute?: { x: number; y: number }[];
+  patrolIndex?: number;
   destination?: { x: number; y: number };
   status: "operational" | "moving" | "damaged" | "unknown";
   sector?: string;

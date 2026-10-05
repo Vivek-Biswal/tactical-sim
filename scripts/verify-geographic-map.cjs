@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
 require.extensions[".ts"] = (module, filename) => {
-  module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021 } }).outputText, filename);
+  module._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true, target: ts.ScriptTarget.ES2021 } }).outputText, filename);
 };
 const { DEFAULT_TRAINING_AREA: area, gridToGeo, geoToGrid, trainingAreaError, inTrainingGrid } = require("../src/simulation/lib/geography.ts");
 const { geographicOverlay } = require("../src/simulation/lib/geographicOverlay.ts");
