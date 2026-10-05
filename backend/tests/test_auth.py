@@ -688,6 +688,23 @@ class FirebaseAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(packet(ws, "ERROR")["code"], 403)
 
+    def test_creator_recovers_key_without_browser_storage_and_trainees_cannot(self):
+        response = self.client.get(self.path + "/membership", headers=self.headers("owner"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        recovered = response.json()["instructorKey"]
+        self.assertEqual(recovered, self.room["instructorKey"])
+        for user in ("commander", "team", "other-owner"):
+            member = self.client.get(self.path + "/membership", headers=self.headers(user))
+            self.assertEqual(member.status_code, 200)
+            self.assertNotIn("instructorKey", member.json())
+            forged = self.client.post(self.path + "/control", json={"action": "start"}, headers={**self.headers(user), "X-Instructor-Key": recovered})
+            self.assertEqual(forged.status_code, 403)
+        self.assertEqual(self.client.get(self.path + "/membership").status_code, 401)
+        with self.client.websocket_connect("/ws/exercises/" + self.room["exerciseId"]) as ws:
+            ws.send_json({"type": "JOIN", "role": "INSTRUCTOR", "name": "Owner", "idToken": self.tokens["owner"], "instructorKey": recovered})
+            self.assertIn("trueUnits", packet(ws, "STATE_UPDATE")["state"])
+
     def test_same_account_creates_as_instructor_and_joins_other_room_as_trainee(self):
         created = self.client.post("/api/exercises", json={}, headers=self.headers("commander"))
         self.assertEqual(created.status_code, 201)

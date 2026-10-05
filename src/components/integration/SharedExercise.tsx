@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { auth } from "@/lib/firebase";
 import { accountParticipantRole, accountRoleLabels, type AccountRole } from "@/lib/roles";
 import { PanelCard } from "@/components/ui/PanelCard";
 import { OfflineSituation } from "./OfflineExercise";
@@ -26,6 +27,7 @@ const injections = [
   ["deploy_uav", "Deploy simulated UAV"], ["restore_map", "Restore map"], ["new_intelligence", "New intelligence"], ["decision_required", "Decision prompt"],
 ] as const;
 type Participant = { role: ParticipantRole; name: string; key: string; uid?: string };
+type RoomMembership = { role: ParticipantRole | null; instructorKey?: string };
 
 
 export function SharedExercise({ id, initialRole, section = "map", basePath = `/training/${encodeURIComponent(id)}` }: { id: string; initialRole?: string; section?: ExerciseSection; basePath?: string }) {
@@ -36,7 +38,7 @@ export function SharedExercise({ id, initialRole, section = "map", basePath = `/
 
 function ResolveRoomAccess(props: { id: string; uid?: string; accountName?: string; initialRole?: string; section: ExerciseSection; basePath: string }) {
   const { isFirebaseConfigured } = useAuth();
-  const [membership, setMembership] = useState<{ role: ParticipantRole | null } | null>(null);
+  const [membership, setMembership] = useState<RoomMembership | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [choice, setChoice] = useState<"commander" | "team">("commander");
@@ -44,19 +46,25 @@ function ResolveRoomAccess(props: { id: string; uid?: string; accountName?: stri
   useEffect(() => {
     if (!isFirebaseConfigured) return;
     const controller = new AbortController();
-    backendRequest<{ role: ParticipantRole | null }>(`/exercises/${encodeURIComponent(props.id)}/membership`, { signal: controller.signal }, 90000)
-      .then(value => { if (!controller.signal.aborted) { setMembership(value); setError(""); } })
+    backendRequest<RoomMembership>(`/exercises/${encodeURIComponent(props.id)}/membership`, { signal: controller.signal }, 90000)
+      .then(value => {
+        if (controller.signal.aborted || auth?.currentUser?.uid !== props.uid) return;
+        if (value.role === "INSTRUCTOR" && value.instructorKey) {
+          try { localStorage.setItem(keyStorage(props.id), value.instructorKey); } catch { /* Keep the recovered key in this account's mounted session. */ }
+        }
+        setMembership(value); setError("");
+      })
       .catch(failure => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Unable to check room access."); });
     return () => controller.abort();
-  }, [props.id, isFirebaseConfigured, attempt]);
+  }, [props.id, props.uid, isFirebaseConfigured, attempt]);
   if (isFirebaseConfigured && !membership) return <AppShell pageTitle="EXERCISE ACCESS"><div className="p-6">{error ? <div role="alert">{error}<button className={`${button} ml-3`} onClick={() => setAttempt(value => value + 1)}>Retry</button></div> : <p role="status">Checking your role in this room…</p>}</div></AppShell>;
   const assigned = membership?.role;
   const resolvedRole = !isFirebaseConfigured ? null : assigned === "INSTRUCTOR" ? "instructor" : assigned?.startsWith("TEAM_") ? "team" : assigned === "COMMANDER" ? "commander" : choice;
   const taskSelector = isFirebaseConfigured && !assigned ? <div className="shrink-0 border-b border-[#D9D8CE] bg-[#EEF3E8] p-3 text-sm text-[#344438]"><label htmlFor="trainee-task" className="mr-3 font-bold">Your trainee task</label><select id="trainee-task" value={choice} onChange={event => setChoice(event.target.value as typeof choice)} className="rounded border border-[#D9D8CE] bg-white p-2"><option value="commander">Commander · coordinate and record decisions</option><option value="team">Field team · send reports and move your team</option></select></div> : null;
-  return <RoomAccess key={resolvedRole || "practice"} {...props} accountRole={resolvedRole} onJoined={onJoined} taskSelector={taskSelector} />;
+  return <RoomAccess key={resolvedRole || "practice"} {...props} recoveredKey={assigned === "INSTRUCTOR" ? membership?.instructorKey : undefined} accountRole={resolvedRole} onJoined={onJoined} taskSelector={taskSelector} />;
 }
 
-function RoomAccess({ id, accountRole, uid, accountName, initialRole, section, basePath, onJoined, taskSelector }: { id: string; accountRole: AccountRole | null; uid?: string; accountName?: string; initialRole?: string; section: ExerciseSection; basePath: string; onJoined: (role: ParticipantRole) => void; taskSelector?: ReactNode }) {
+function RoomAccess({ id, accountRole, uid, accountName, initialRole, section, basePath, onJoined, taskSelector, recoveredKey }: { id: string; accountRole: AccountRole | null; uid?: string; accountName?: string; initialRole?: string; section: ExerciseSection; basePath: string; onJoined: (role: ParticipantRole) => void; taskSelector?: ReactNode; recoveredKey?: string }) {
   const [role, setRole] = useState<ParticipantRole>(roles.includes(initialRole as ParticipantRole) ? initialRole as ParticipantRole : "COMMANDER");
   const [team, setTeam] = useState<"TEAM_ALPHA" | "TEAM_BRAVO" | "TEAM_CHARLIE">("TEAM_ALPHA");
   const [name, setName] = useState(accountName || "Trainee");
@@ -90,12 +98,12 @@ function RoomAccess({ id, accountRole, uid, accountName, initialRole, section, b
           if (!membershipReady) return;
           let saved = "";
           try { saved = localStorage.getItem(keyStorage(id)) || ""; } catch { /* Explicit key entry remains available. */ }
-          setParticipant({ role: roomRole, name: name.trim(), uid, key: roomRole === "INSTRUCTOR" ? key.trim() || saved : "" });
+          setParticipant({ role: roomRole, name: name.trim(), uid, key: roomRole === "INSTRUCTOR" ? recoveredKey || key.trim() || saved : "" });
         }}>
           {accountRole ? <div className="rounded-lg border border-[#D9D8CE] bg-[#EEF3E8] p-4 text-sm text-[#344438]"><p className="font-black">{accountRole === "instructor" ? "Instructor · room creator" : `Trainee · ${accountRoleLabels[accountRole]}` }</p><p className="mt-1 text-xs text-[#687066]">{accountRole === "instructor" ? "Manage the room you created. Only this room’s creator can use Instructor controls." : accountRole === "commander" ? "Coordinate teams and record decisions. Your instructor manages exercise settings." : "Send field reports and move your own team. Choose your team below."}</p><span className="mt-3 inline-block text-[10px] font-bold uppercase tracking-widest text-[#556B3F]">Assigned for this exercise room</span></div> : <><p className="rounded-lg bg-[#FDF3E3] p-3 text-xs text-[#8A5C2A]">Local development session. Test roles work only with a backend explicitly running in demo mode. Live joint exercises require sign-in.</p><label className="block text-xs font-bold text-[#344438]">Local test role<select className={field} value={role} onChange={event => setRole(event.target.value as ParticipantRole)}>{roles.map(r => <option key={r} value={r}>{r.replaceAll("_", " ")}</option>)}</select></label></>}
           {accountRole === "team" && <><div><label htmlFor="room-team" className="block text-xs font-bold text-[#344438]">Your team</label><select id="room-team" className={field} aria-describedby="room-team-help" disabled={!membershipReady || Boolean(boundTeam)} value={team} onChange={event => setTeam(event.target.value as typeof team)}><option value="TEAM_ALPHA">Team Alpha</option><option value="TEAM_BRAVO">Team Bravo</option><option value="TEAM_CHARLIE">Team Charlie</option></select><p id="room-team-help" className="mt-2 text-xs text-[#687066]">{boundTeam ? "Your account is assigned to this team for this room." : membershipReady ? "Your first join assigns your account to this team for the room. Reconnect using the same team." : "Checking your team assignment…"}</p></div>{membershipError && <div role="alert" className="rounded-lg bg-[#FCECE8] p-3 text-xs text-[#A94A3F]">{membershipError}<button type="button" className={`${button} mt-3 block`} onClick={() => setMembershipAttempt(value => value + 1)}>Retry team check</button></div>}</>}
           <div><label className="block text-xs font-bold text-[#344438]">{uid ? "Account name" : "Callsign"}<input className={field} aria-describedby={uid ? "room-account-help" : undefined} value={name} readOnly={Boolean(uid)} onChange={event => setName(event.target.value)} required maxLength={80} /></label>{uid && <p id="room-account-help" className="mt-2 text-xs text-[#687066]">Messages and decisions are recorded against your signed-in account.</p>}</div>
-          {roomRole === "INSTRUCTOR" && <div><label className="block text-xs font-bold text-[#344438]">Room recovery key<input className={field} aria-describedby="room-key-help" type="password" value={key} onChange={event => setKey(event.target.value)} placeholder="Uses your saved key on this browser" autoComplete="off" /></label><p id="room-key-help" className="mt-2 text-xs text-[#687066]">On another browser, enter the key and sign in to the same account that created this room.</p></div>}
+          {roomRole === "INSTRUCTOR" && (recoveredKey ? <p className="text-xs text-[#556B3F]">Instructor access restored securely for your signed-in account.</p> : <div><label className="block text-xs font-bold text-[#344438]">Room recovery key<input className={field} aria-describedby="room-key-help" type="password" value={key} onChange={event => setKey(event.target.value)} placeholder="Uses your saved key on this browser" autoComplete="off" /></label><p id="room-key-help" className="mt-2 text-xs text-[#687066]">On another browser, enter the key and sign in to the same account that created this room.</p></div>)}
           <button className="rounded-lg bg-[#556B3F] px-4 py-3 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50" disabled={!name.trim() || !membershipReady}>Connect to exercise</button>
         </form>
       </PanelCard></div></div>}

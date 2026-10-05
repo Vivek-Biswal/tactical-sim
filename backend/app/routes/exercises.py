@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.auth import (
     assign_owner,
@@ -6,6 +7,7 @@ from app.auth import (
     identity_for,
     is_demo,
     membership,
+    own_room,
     require_active,
 )
 from app.persistence import persistence
@@ -100,12 +102,17 @@ async def get_exercise(
 @router.get("/{exercise_id}/membership")
 async def get_membership(exercise_id: str, request: Request):
     identity = identity_for(request)
-    member = membership(get_session(exercise_id), identity)
-    return {
+    session = get_session(exercise_id)
+    member = membership(session, identity)
+    result = {
         "exerciseId": exercise_id,
         "accountRole": "instructor" if member and member["role"] == "INSTRUCTOR" else "trainee",
         "role": member["role"] if member else None,
     }
+    if member and member["role"] == "INSTRUCTOR":
+        own_room(session, identity)
+        result["instructorKey"] = session.instructor_key
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{exercise_id}/control")

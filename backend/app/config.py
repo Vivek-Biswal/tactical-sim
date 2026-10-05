@@ -7,10 +7,14 @@ class Settings:
     API_PREFIX = "/api"
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "8000"))
-    CORS_ORIGINS = os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:3100,http://127.0.0.1:3000,http://127.0.0.1:3100",
-    ).split(",")
+    CORS_ORIGINS = [
+        origin.strip().rstrip("/")
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://localhost:3100,http://127.0.0.1:3000,http://127.0.0.1:3100",
+        ).split(",")
+        if origin.strip()
+    ]
     STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "memory")
     FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "tactical-sim-d3bf4")
     AUTH_MODE = os.getenv("AUTH_MODE", "firebase")

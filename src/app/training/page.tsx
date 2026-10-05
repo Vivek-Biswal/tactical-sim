@@ -73,7 +73,7 @@ function AccountLobby() {
     try {
       const room = await backendRequest<RoomCreated>("/exercises", { method: "POST", signal: controller.signal, body: JSON.stringify({ teamName, isDemoMode: demo, trainingArea }) });
       if (lifecycle.disposed || controller.signal.aborted || !sameAccount()) return;
-      localStorage.setItem(keyStorage(room.exerciseId), room.instructorKey);
+      try { localStorage.setItem(keyStorage(room.exerciseId), room.instructorKey); } catch { /* The creator can recover access from verified server membership. */ }
       router.push(`/training/${room.exerciseId}${isFirebaseConfigured ? "/controls" : "/controls?role=INSTRUCTOR"}`);
     } catch (failure) {
       if (!lifecycle.disposed && !controller.signal.aborted && sameAccount()) setError(failure instanceof Error ? failure.message : "Unable to create exercise");

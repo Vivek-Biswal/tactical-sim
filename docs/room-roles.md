@@ -20,7 +20,7 @@ Completed rooms refuse new participants. Existing participants can reconnect and
 
 Set `AUTH_MODE=firebase`, the matching `FIREBASE_PROJECT_ID`, and allowed frontend `CORS_ORIGINS` on the backend. HTTP requests use `Authorization: Bearer <Firebase ID token>`; WebSockets send the token in the first JOIN packet, never in the URL. Verification checks Google's signature, Firebase audience/issuer, identity and lifetime. Anonymous users are rejected.
 
-The frontend checks server membership before showing creator controls or recovery-key fields. Account switching discards room sessions/reports, and asynchronous creation/export handlers cannot write keys or download reports under a different account. Room keys remain scoped to the creator's UID in browser storage.
+The frontend checks server membership before showing creator controls or recovery-key fields. The authenticated membership response restores the private instructor key only for the verified room creator and uses `Cache-Control: no-store`; trainee responses never contain the key. This lets the creator reconnect after browser storage is cleared or on another browser. The recovered key is retained in the current account's mounted session even when browser storage is unavailable. Account switching discards room sessions/reports, and asynchronous creation/recovery/export handlers cannot write keys or download reports under a different account. Room keys remain scoped to the creator's UID in browser storage.
 
 Explicit local `AUTH_MODE=demo` retains local practice and is refused in recognized deployed environments. Production pages fail closed when Firebase configuration is missing. Legacy checkpoints without an authenticated owner require a new room.
 
