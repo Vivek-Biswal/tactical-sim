@@ -1,3 +1,5 @@
+> Current policy: every signed-in user can create a room as Instructor and join another as Trainee. Legacy account-role claims are ignored. See [room roles](room-roles.md). Earlier account-provisioning descriptions below are superseded.
+
 # Firebase sign-in
 
 The existing `/login` page supports Google, email/password sign-in, account creation, and password reset. It retains the website's cream, olive, and topographic design. Authentication uses the existing Firebase AuthProvider and observes Firebase session state. Passwords are passed to Firebase only and are never stored in browser storage by this app.

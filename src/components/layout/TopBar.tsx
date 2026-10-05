@@ -12,16 +12,16 @@ type RoleKey = "instructor" | "commander" | "team" | "admin";
 
 interface TopBarProps {
   pageTitle: string;
-  /** Legacy page metadata; it never determines the displayed account role. */
+  /** Current workspace or server-resolved room role, used only as a display label. */
   role?: RoleKey;
   /** Mobile sidebar toggle */
   onMenuToggle?: () => void;
   mobileMenuOpen?: boolean;
 }
 
-export function TopBar({ pageTitle, onMenuToggle, mobileMenuOpen }: TopBarProps) {
-  const { user, role, logout, isFirebaseConfigured, refreshAccountAccess } = useAuth();
-  const displayRole = !isFirebaseConfigured ? "LOCAL PRACTICE" : role ? accountRoleLabels[role].toUpperCase() : "ACCOUNT ACCESS";
+export function TopBar({ pageTitle, role: workspaceRole, onMenuToggle, mobileMenuOpen }: TopBarProps) {
+  const { user, logout, isFirebaseConfigured, refreshAccountAccess } = useAuth();
+  const displayRole = !isFirebaseConfigured ? "LOCAL PRACTICE" : workspaceRole && workspaceRole !== "admin" ? accountRoleLabels[workspaceRole].toUpperCase() : "TRAINING ACCOUNT";
   const [leaving, setLeaving] = useState(false);
   const router = useRouter();
   const { addToast } = useToast();
@@ -74,7 +74,7 @@ export function TopBar({ pageTitle, onMenuToggle, mobileMenuOpen }: TopBarProps)
         <div className="hidden sm:block w-px h-5 bg-[#D9D8CE]" />
 
         {/* Role badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F5EE] border border-[#D9D8CE] rounded" aria-label={isFirebaseConfigured ? `Account role: ${displayRole}` : "Local practice; no authenticated account"}>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F5EE] border border-[#D9D8CE] rounded" aria-label={isFirebaseConfigured ? `Workspace: ${displayRole}` : "Local practice; no authenticated account"}>
           <div className="w-6 h-6 rounded bg-[#556B3F] flex items-center justify-center flex-shrink-0">
             {user && user.photoURL ? (
               <Image src={user.photoURL} alt="Profile" width={24} height={24} unoptimized className="w-full h-full rounded object-cover" />
@@ -97,7 +97,7 @@ export function TopBar({ pageTitle, onMenuToggle, mobileMenuOpen }: TopBarProps)
         {isFirebaseConfigured && user && <button type="button" onClick={async () => {
           try { await refreshAccountAccess(); }
           catch (error) { addToast({ variant: "error", title: "Could not refresh access", message: error instanceof Error ? error.message : "Please try again." }); }
-        }} className="flex h-8 w-8 items-center justify-center rounded text-[#687066] hover:bg-[#F0EEE7] hover:text-[#556B3F]" title="Refresh account access after an administrator changes your role" aria-label="Refresh account access"><RefreshCw size={16} /></button>}
+        }} className="flex h-8 w-8 items-center justify-center rounded text-[#687066] hover:bg-[#F0EEE7] hover:text-[#556B3F]" title="Refresh your sign-in session" aria-label="Refresh account access"><RefreshCw size={16} /></button>}
 
         {/* Logout Button */}
         <button

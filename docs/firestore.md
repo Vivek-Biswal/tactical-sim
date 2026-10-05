@@ -1,3 +1,5 @@
+> Current policy: every signed-in user can create a room as Instructor and join another as Trainee. Legacy account-role claims are ignored. See [room roles](room-roles.md). Earlier account-provisioning descriptions below are superseded.
+
 # Firestore persistence
 
 ## Provisioned database

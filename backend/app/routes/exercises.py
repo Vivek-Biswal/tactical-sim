@@ -2,10 +2,11 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.auth import (
     assign_owner,
+    http_room_role,
     identity_for,
     is_demo,
     membership,
-    require_account_role,
+    require_active,
 )
 from app.persistence import persistence
 from app.scenario_engine.engine import engine_manager
@@ -34,8 +35,6 @@ def state(session, key=None, identity=None):
     if not is_demo():
         if membership(session, identity) is None:
             raise HTTPException(403, "Join this exercise before reading its state")
-        if key and identity.role != "instructor":
-            raise HTTPException(403, "Instructor account required to use the room key")
         if key:
             require_instructor(session, key, identity)
     result = session.get_state(is_instructor(session, key, identity))
@@ -62,7 +61,7 @@ async def list_exercises(request: Request):
 @router.post("", status_code=201)
 async def create_exercise(data: ExerciseCreate, request: Request):
     identity = identity_for(request)
-    require_account_role(identity, "instructor")
+    require_active(identity)
     session = engine_manager.create_exercise(
         is_demo=data.isDemoMode,
         team_name=data.teamName,
@@ -104,7 +103,7 @@ async def get_membership(exercise_id: str, request: Request):
     member = membership(get_session(exercise_id), identity)
     return {
         "exerciseId": exercise_id,
-        "accountRole": identity.role,
+        "accountRole": "instructor" if member and member["role"] == "INSTRUCTOR" else "trainee",
         "role": member["role"] if member else None,
     }
 
@@ -195,7 +194,7 @@ async def message(
 ):
     session = get_session(exercise_id)
     identity = identity_for(request)
-    if not is_demo() and identity.role == "instructor":
+    if not is_demo() and http_room_role(session, identity) == "INSTRUCTOR":
         require_instructor(session, x_instructor_key, identity)
     session.advance_wallclock()
     result = send_account_radio(session, identity, data)

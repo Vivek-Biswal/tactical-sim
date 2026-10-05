@@ -7,7 +7,6 @@ from app.auth import (
     http_room_role,
     is_demo,
     own_room,
-    require_account_role,
     require_actor_value,
 )
 from app.scenario_engine.engine import engine_manager
@@ -121,8 +120,8 @@ def send_account_radio(session, identity, data):
 
 def record_account_decision(session, identity, data):
     if not is_demo():
-        require_account_role(identity, "commander")
-        http_room_role(session, identity)
+        if http_room_role(session, identity) != "COMMANDER":
+            raise HTTPException(403, "Only the trainee Commander can record decisions")
         require_actor_value(
             identity, data.traineeId, data.model_fields_set, "traineeId"
         )

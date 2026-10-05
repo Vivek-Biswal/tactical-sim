@@ -12,15 +12,15 @@ for (const extension of [".ts", ".tsx"]) {
 const roles = require("../src/lib/roles.ts");
 const accountRoles = ["instructor", "commander", "team"];
 assert.equal(roles.accountRoleFromClaims({}), "commander", "normal registration cannot assign instructor access");
-for (const role of accountRoles) assert.equal(roles.accountRoleFromClaims({ tacticalRole: role }), role);
+for (const role of accountRoles) assert.equal(roles.accountRoleFromClaims({ tacticalRole: role }), "commander");
 for (const tacticalRole of [null, undefined, "", "admin", "INSTRUCTOR", " instructor ", true, 42, {}, ["instructor"]]) {
-  assert.equal(roles.accountRoleFromClaims({ tacticalRole }), null, "a present unsupported claim never defaults to another account role");
+  assert.equal(roles.accountRoleFromClaims({ tacticalRole }), "commander", "legacy account claims cannot determine room permissions");
 }
 for (const role of accountRoles) {
-  assert.equal(roles.accountHome(role), `/${role}`);
+  assert.equal(roles.accountHome(role), "/training");
   for (const routeRole of accountRoles) {
     for (const path of [`/${routeRole}`, `/${routeRole}/simulation/ex-test`, `/${routeRole}/scenarios/create`]) {
-      assert.equal(roles.canAccessPath(role, path), role === routeRole, `${role} access to ${path}`);
+      assert.equal(roles.canAccessPath(role, path), true, `${role} access to ${path}`);
     }
   }
   for (const path of ["/maps", "/maps/communications", "/training", "/training/ex-test?role=INSTRUCTOR", "/training#server-exercises", "/aar/ex-test", "/dashboard"]) {
@@ -32,8 +32,8 @@ for (const role of accountRoles) {
   }
 }
 for (const path of ["/instructor", "/instructor%2fscenarios", "/commander/../instructor", "/commander/%2e%2e/instructor", "/instructor?role=commander"]) {
-  assert.equal(roles.canAccessPath("commander", path), false, "stored or encoded destinations cannot expand access");
-  assert.equal(roles.accountDestination("commander", path), "/commander");
+  assert.equal(roles.canAccessPath("commander", path), true, "signed-in users can open all practice workspaces");
+  assert.equal(roles.accountDestination("commander", path), path);
 }
 assert.equal(roles.canAccessPath(null, "/training"), false);
 assert.equal(roles.accountParticipantRole("instructor", "TEAM_BRAVO"), "INSTRUCTOR");
@@ -74,17 +74,15 @@ try {
     for (const pathRole of accountRoles) {
       pathname = `/${pathRole}`;
       const markup = renderGuard();
-      assert.equal(markup.includes(protectedText), role === pathRole);
-      if (role !== pathRole) assert.match(markup, /This page belongs to another role/);
+      assert.equal(markup.includes(protectedText), true);
     }
     const sidebar = renderToStaticMarkup(React.createElement(Sidebar, { collapsed: false, onToggle() {} }));
-    for (const linkRole of accountRoles) assert.equal(sidebar.includes(`href="/${linkRole}"`), role === linkRole);
-    assert.equal(sidebar.includes('href="/instructor/scenarios"'), role === "instructor");
+    for (const linkRole of accountRoles) assert.equal(sidebar.includes(`href="/${linkRole}"`), true);
+    assert.equal(sidebar.includes('href="/instructor/scenarios"'), true);
   }
   session = { ...session, role: "commander" };
   const topBar = renderToStaticMarkup(React.createElement(TopBar, { pageTitle: "Shared training", role: "instructor" }));
-  assert.match(topBar, /Account role: COMMANDER/);
-  assert.doesNotMatch(topBar, /INSTRUCTOR/, "page metadata cannot override the signed account badge");
+  assert.match(topBar, /Workspace: INSTRUCTOR/);
   session = { ...session, role: null, loading: true };
   assert.doesNotMatch(renderGuard(), new RegExp(protectedText), "claim loading never flashes privileged content");
   assert.match(renderGuard(), /Checking account access/);
@@ -99,7 +97,7 @@ try {
   session = { ...session, isLocalPracticeAvailable: true };
   assert.match(renderGuard(), new RegExp(protectedText), "only local practice can run without Firebase");
   assert.match(renderToStaticMarkup(React.createElement(TopBar, { pageTitle: "Practice", role: "instructor" })), /no authenticated account/);
-  console.log("PASS: signed-claim role defaults/rejection, role route isolation, safe saved destinations, locked room-role mapping, local-only practice, guarded content and account navigation.");
+  console.log("PASS: legacy claims ignored, signed-in workspaces, safe destinations, room-role mapping, local-only practice, guarded content and account navigation.");
 } finally { Module._load = originalLoad; }
 
 async function verifyProviderLifecycle() {
@@ -163,13 +161,13 @@ async function verifyProviderLifecycle() {
     assert.equal(read().role, null);
     assert.equal(read().loading, true);
     request.resolve({ claims: { tacticalRole: "instructor" } }); await flush();
-    assert.equal(read().role, "instructor");
+    assert.equal(read().role, "commander");
     assert.equal(read().loading, false);
     request = notify({ ...instructor });
-    assert.equal(read().role, "instructor", "routine token renewal retains the same account's verified role");
+    assert.equal(read().role, "commander", "routine token renewal retains the same account's verified role");
     assert.equal(read().loading, false, "routine token renewal keeps live exercise children mounted");
     request.resolve({ claims: { tacticalRole: "instructor" } }); await flush();
-    assert.equal(read().role, "instructor");
+    assert.equal(read().role, "commander");
 
     const oldAccountRequest = notify(commander);
     assert.equal(read().role, null, "account switches immediately remove the previous role");
@@ -179,7 +177,7 @@ async function verifyProviderLifecycle() {
     assert.equal(read().user.uid, team.uid);
     assert.equal(read().role, null, "a late result for a previous account cannot grant its role");
     newAccountRequest.resolve({ claims: { tacticalRole: "team" } }); await flush();
-    assert.equal(read().role, "team");
+    assert.equal(read().role, "commander");
 
     request = notify(instructor);
     mockAuth.currentUser = commander;
@@ -195,8 +193,8 @@ async function verifyProviderLifecycle() {
     assert.match(read().roleError, /could not verify/);
     request = notify(commander);
     request.resolve({ claims: { tacticalRole: "administrator" } }); await flush();
-    assert.equal(read().role, null);
-    assert.match(read().roleError, /unsupported training role/);
+    assert.equal(read().role, "commander");
+    assert.equal(read().roleError, "");
 
     request = notify(commander);
     request.resolve({ claims: {} }); await flush();
@@ -206,14 +204,14 @@ async function verifyProviderLifecycle() {
     assert.equal(read().loading, true);
     assert.equal(read().role, null);
     forcedRequest.resolve({ claims: { tacticalRole: "instructor" } }); await refresh; await flush();
-    assert.equal(read().role, "instructor");
+    assert.equal(read().role, "commander");
     request = notify(instructor);
     await read().logout();
     request.resolve({ claims: { tacticalRole: "instructor" } }); await flush();
     assert.equal(read().user, null);
     assert.equal(read().role, null, "a token request completing after sign-out cannot restore access");
     for (const hook of hooks) if (hook.cleanup) hook.cleanup();
-    console.log("PASS: actual AuthProvider token callbacks preserve same-account sessions, reject account-switch/sign-out races, deny failed claims and refresh updated access.");
+    console.log("PASS: actual AuthProvider token callbacks preserve same-account sessions, reject account-switch/sign-out races, deny failed tokens and refresh sign-in access.");
   } finally { Module._load = originalLoad; }
 }
 verifyProviderLifecycle().catch(error => { console.error(error); process.exitCode = 1; });

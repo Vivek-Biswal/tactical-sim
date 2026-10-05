@@ -1,4 +1,4 @@
-/** Account permissions come from Firebase ID-token claims, never browser preferences. */
+/** Workspace types. Live exercise authority is assigned by server room ownership. */
 export type AccountRole = "instructor" | "commander" | "team";
 export type TeamParticipantRole = "TEAM_ALPHA" | "TEAM_BRAVO" | "TEAM_CHARLIE";
 export type AccountParticipantRole = "INSTRUCTOR" | "COMMANDER" | TeamParticipantRole;
@@ -14,14 +14,14 @@ export function isLocalPracticeHost(hostname: string): boolean {
 }
 
 export function accountRoleFromClaims(claims: Record<string, unknown>): AccountRole | null {
-  // Accounts created through normal sign-up have no privileged claim.
-  if (!Object.hasOwn(claims, "tacticalRole")) return "commander";
-  const role = claims.tacticalRole;
-  return role === "instructor" || role === "commander" || role === "team" ? role : null;
+  void claims;
+  // All signed-in users can create or join rooms. The server assigns room roles.
+  return "commander";
 }
 
 export function accountHome(role: AccountRole): string {
-  return role === "team" ? "/team" : role === "instructor" ? "/instructor" : "/commander";
+  void role;
+  return "/training";
 }
 
 export function accountParticipantRole(role: AccountRole, team: TeamParticipantRole = "TEAM_ALPHA"): AccountParticipantRole {
@@ -46,7 +46,7 @@ export function canAccessPath(role: AccountRole | null, path: string): boolean {
   if (!pathname) return false;
   const inSection = (section: string) => pathname === section || pathname.startsWith(`${section}/`);
   for (const restricted of ["instructor", "commander", "team"] as const) {
-    if (inSection(`/${restricted}`)) return role === restricted;
+    if (inSection(`/${restricted}`)) return true;
   }
   return pathname === "/" || ["/maps", "/training", "/aar", "/dashboard"].some(inSection);
 }

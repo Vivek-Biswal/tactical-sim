@@ -1,3 +1,5 @@
+> Current policy: every signed-in user can create a room as Instructor and join another as Trainee. Legacy account-role claims are ignored. See [room roles](room-roles.md). Earlier account-provisioning descriptions below are superseded.
+
 # Backend integration API
 
 Use this document with [the runbook](backend.md) and the running server's `/docs` or `/openapi.json`. The examples are illustrative requests and response excerpts, not records of an actual exercise. The existing frontend contract remains canonical; the conceptual object names in Varun's work file do not require renaming existing fields.
@@ -8,9 +10,9 @@ Local HTTP base: `http://127.0.0.1:8000/api`. WebSocket base: `ws://127.0.0.1:80
 
 The default `AUTH_MODE=firebase` requires a verified Firebase ID token for exercise requests. Send it as `Authorization: Bearer <ID token>` over HTTP, or as `idToken` in the first socket JOIN packet. Tokens in socket URLs are rejected. Account permissions come from the signed `tacticalRole` claim: `instructor`, `commander`, or `team`; a missing claim defaults to Commander and an unknown value is denied. See [account setup and role provisioning](account-roles.md). The explicit, local-only `AUTH_MODE=demo` retains prototype role selection for tests/development; it is refused in known deployed environments.
 
-1. Sign in with an Instructor account. `POST /api/exercises` creates a pending room; `POST /api/exercises/start` creates and starts one immediately. The server records that account as its creator.
+1. Sign in with any account. `POST /api/exercises` creates a pending room; `POST /api/exercises/start` creates and starts one immediately. The server records that account as its creator.
 2. Keep the returned `exerciseId` and the creator-only `instructorKey`. Share the room ID/participant link, not the key.
-3. Connect participants to `/ws/exercises/{exerciseId}` and send `JOIN` with a fresh ID token within ten seconds. The requested room role must match the account's signed role.
+3. Connect participants to `/ws/exercises/{exerciseId}` and send `JOIN` with a fresh ID token within ten seconds. The creator joins as INSTRUCTOR; all others join as COMMANDER or a field team, fixed after first joining.
 4. The server owns the clock. Render `STATE_UPDATE.state`; use command acknowledgements to confirm mutations.
 5. End the room, then fetch/export its AAR. Reset intentionally clears the room's history.
 
@@ -40,8 +42,8 @@ Creation returns HTTP 201 with the state and `instructorKey`. The key is omitted
 | GET `/api/scenarios` | None | Public scenario list |
 | GET `/api/scenarios/{id}` | `scenario-op-silent-link` or `demo` | Public scenario/events; unknown IDs return 404 |
 | GET `/api/scenarios/training-areas` | None | Public India location/terrain/profile catalog |
-| POST `/api/exercises` | Creation object above | Instructor account; 201, pending state and creator key |
-| POST `/api/exercises/start` | Same creation object | Instructor account; 201, running state and creator key |
+| POST `/api/exercises` | Creation object above | Any signed-in account; creator becomes Instructor; 201, pending state and creator key |
+| POST `/api/exercises/start` | Same creation object | Any signed-in account; creator becomes Instructor; 201, running state and creator key |
 | GET `/api/exercises` | None | Signed account's loaded-room memberships, including its created rooms |
 | GET `/api/exercises/{id}` | Optional `X-Instructor-Key` | Fixed room member's filtered state; creator Instructor + valid key permits truth |
 | GET `/api/exercises/{id}/membership` | None | Signed account's `accountRole` and fixed room `role` (or null before joining) |
@@ -61,7 +63,7 @@ Exercise routes require `Authorization: Bearer <ID token>`; root/health and GET 
 Membership example after a Team Alpha join:
 
 ```json
-{"exerciseId":"ex-example","accountRole":"team","role":"TEAM_ALPHA"}
+{"exerciseId":"ex-example","accountRole":"trainee","role":"TEAM_ALPHA"}
 ```
 
 Membership is private to the requesting account; it is not a directory of user claims. Commander and Team accounts use a known room ID to JOIN before reading state/decisions or sending HTTP commands; they cannot list every server room. Room creation binds the creator, and WebSocket JOIN establishes participant memberships. REST commands never create memberships, including rejected commands. Completed rooms reject first joins but permit existing members to reconnect and review their final AAR. Reset preserves memberships and reopens the pending exercise to new participants. Instructor accounts can access only their own rooms. Changing claims does not reassign a room's fixed membership. Explicit HTTP sender/decision identity fields must match the verified account; omitting them lets the server assign them.

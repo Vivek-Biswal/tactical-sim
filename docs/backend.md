@@ -1,3 +1,5 @@
+> Current policy: every signed-in user can create a room as Instructor and join another as Trainee. Legacy account-role claims are ignored. See [room roles](room-roles.md). Earlier account-provisioning descriptions below are superseded.
+
 # Shared simulation backend
 
 FastAPI owns each shared exercise's clock, events, communication queues, movement, map snapshots and decision records. The root Next.js app connects at /training. Storage uses memory by default, with optional Firestore checkpoints, a two-minute demonstration and a 15-minute training mode. Firebase account authorization is enabled by default. No real military data, weapon effects, combat scoring or tactical correctness claims are included. See the [integration API reference](backend-api.md) for request/response examples, [account-role setup](account-roles.md) for Instructor provisioning, and the [Varun completion checklist](varun-backend-completion.md) for work-file coverage.

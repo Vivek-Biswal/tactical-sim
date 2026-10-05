@@ -10,7 +10,7 @@ type RoleKey = "instructor" | "commander" | "team" | "admin";
 interface AppShellProps {
   children: React.ReactNode;
   pageTitle: string;
-  /** Legacy page metadata; account permissions and the header use signed claims. */
+  /** Current workspace label; live permissions are independently enforced by the server. */
   role?: RoleKey;
   workspace?: boolean;
 }
@@ -43,7 +43,7 @@ const ContentBackground = () => (
   </div>
 );
 
-export function AppShell({ children, pageTitle, workspace = false }: AppShellProps) {
+export function AppShell({ children, pageTitle, role, workspace = false }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(workspace);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -76,6 +76,7 @@ export function AppShell({ children, pageTitle, workspace = false }: AppShellPro
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopBar
           pageTitle={pageTitle}
+          role={role}
           onMenuToggle={() => setMobileMenuOpen((p) => !p)}
           mobileMenuOpen={mobileMenuOpen}
         />

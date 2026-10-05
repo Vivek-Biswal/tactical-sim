@@ -162,7 +162,7 @@ class FirebaseAuthorizationTests(unittest.TestCase):
             self.client.post(
                 "/api/exercises", json={}, headers=self.headers("commander")
             ).status_code,
-            403,
+            201,
         )
         self.assertEqual(
             self.client.post(
@@ -244,7 +244,7 @@ class FirebaseAuthorizationTests(unittest.TestCase):
         )
         self.fixtures[token] = claims("checked")
         self.fixtures[token].pop("tacticalRole")
-        self.assertEqual(verify_firebase_identity(token).role, "commander")
+        self.assertEqual(verify_firebase_identity(token).role, "participant")
 
     def test_certificate_verification_failure_never_falls_back_to_demo(self):
         with patch(
@@ -260,8 +260,7 @@ class FirebaseAuthorizationTests(unittest.TestCase):
     def test_socket_roles_come_from_account_and_team_binding_survives_reconnect(self):
         for user, role in (
             ("commander", "INSTRUCTOR"),
-            ("commander", "TEAM_ALPHA"),
-            ("team", "COMMANDER"),
+            ("owner", "COMMANDER"),
             ("other-owner", "INSTRUCTOR"),
         ):
             with (
@@ -297,7 +296,7 @@ class FirebaseAuthorizationTests(unittest.TestCase):
             bound,
             {
                 "exerciseId": self.room["exerciseId"],
-                "accountRole": "team",
+                "accountRole": "trainee",
                 "role": "TEAM_ALPHA",
             },
         )
@@ -689,6 +688,25 @@ class FirebaseAuthorizationTests(unittest.TestCase):
             )
             self.assertEqual(packet(ws, "ERROR")["code"], 403)
 
+    def test_same_account_creates_as_instructor_and_joins_other_room_as_trainee(self):
+        created = self.client.post("/api/exercises", json={}, headers=self.headers("commander"))
+        self.assertEqual(created.status_code, 201)
+        own_room = created.json()
+        own_path = "/api/exercises/" + own_room["exerciseId"]
+        own_headers = {**self.headers("commander"), "X-Instructor-Key": own_room["instructorKey"]}
+        self.assertEqual(self.client.post(own_path + "/control", json={"action": "start"}, headers=own_headers).status_code, 200)
+        with self.client.websocket_connect("/ws/exercises/" + self.room["exerciseId"]) as ws:
+            self.join(ws, "commander", "COMMANDER")
+            packet(ws, "STATE_UPDATE")
+        self.assertEqual(self.client.post(self.path + "/control", json={"action": "start"}, headers=self.headers("commander", True)).status_code, 403)
+        # A legacy Instructor claim is also a trainee in someone else's room.
+        with self.client.websocket_connect("/ws/exercises/" + own_room["exerciseId"]) as ws:
+            self.join(ws, "owner", "COMMANDER")
+            packet(ws, "STATE_UPDATE")
+        self.assertEqual(self.client.post(own_path + "/control", json={"action": "pause"}, headers={**self.headers("owner"), "X-Instructor-Key": own_room["instructorKey"]}).status_code, 403)
+        self.assertEqual(self.client.get(own_path + "/membership", headers=self.headers("commander")).json()["role"], "INSTRUCTOR")
+        self.assertEqual(self.client.get(self.path + "/membership", headers=self.headers("commander")).json()["role"], "COMMANDER")
+
     def test_demo_mode_is_explicit_and_refused_for_deployed_environments(self):
         with (
             patch.object(settings, "AUTH_MODE", "demo"),
@@ -736,7 +754,7 @@ class FirebaseSignatureTests(unittest.TestCase):
             data=json.dumps({"test-key": public_pem.decode()}).encode(),
         )
         with patch("app.auth.certificate_request", return_value=certificate):
-            self.assertEqual(verify_firebase_identity(original).role, "commander")
+            self.assertEqual(verify_firebase_identity(original).role, "participant")
             with self.assertRaises(HTTPException) as error:
                 verify_firebase_identity(tampered)
             self.assertEqual(error.exception.status_code, 401)

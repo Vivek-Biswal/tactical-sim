@@ -47,23 +47,16 @@ try {
     session = { ...session, role, user: { ...session.user, uid: `test-${role}` } };
     for (const suppliedRole of ["INSTRUCTOR", "COMMANDER", "TEAM_BRAVO", "unrecognised-role"]) {
       const markup = room(suppliedRole);
-      assert.match(markup, new RegExp(`${role}(?: member)? account`, "i"));
-      assert.match(markup, new RegExp(`Account role: ${roles.accountRoleLabels[role].toUpperCase()}`));
+      assert.match(markup, /Checking your role in this room/);
       assert.doesNotMatch(markup, /Local test role|Training role<|Local development session/, "signed-in accounts never select their permission level");
-      assert.equal(markup.includes("Room recovery key"), role === "instructor", "a role query cannot reveal another role's recovery-key field");
+      assert.equal(markup.includes("Room recovery key"), false, "server membership must resolve before revealing creator fields");
       const selectors = selectOptions(markup);
-      if (role === "team") {
-        assert.deepEqual(selectors, [["TEAM_ALPHA", "TEAM_BRAVO", "TEAM_CHARLIE"]], "team accounts choose only a team slot");
-        assert.match(markup, /<label[^>]*for="room-team"[^>]*>Your team<\/label>/, "team selection must have an accessible label");
-        assert.match(markup, /<select[^>]*id="room-team"[^>]*disabled/, "team assignment must be checked before joining");
-      } else {
-        assert.deepEqual(selectors, [], "privileged role choices are never exposed to a signed-in account");
-      }
+      assert.deepEqual(selectors, [], "room forms wait for the server membership response");
     }
     const lobby = renderToStaticMarkup(React.createElement(TrainingLobby));
-    assert.equal(lobby.includes("Create instructor room"), role === "instructor");
-    assert.equal(lobby.includes(">Create room</button>"), role === "instructor");
-    assert.equal(lobby.includes('data-testid="training-area-fields"'), role === "instructor");
+    assert.equal(lobby.includes("Create instructor room"), true);
+    assert.equal(lobby.includes(">Create room</button>"), true);
+    assert.equal(lobby.includes('data-testid="training-area-fields"'), true);
     assert.match(lobby, /Join an exercise/);
     assert.doesNotMatch(lobby, /Local development|Local test lobby/);
   }
@@ -80,5 +73,5 @@ try {
   assert.match(room("INSTRUCTOR"), /Local development session/);
   assert.match(room("INSTRUCTOR"), /Local test role/);
   assert.match(room("INSTRUCTOR"), /no authenticated account/);
-  console.log("PASS: joint-room account roles override forged role parameters; team-only choices; instructor-only recovery keys and room creation; loading, sign-out and public missing-config guards; labelled local demo.");
+  console.log("PASS: server membership resolves before room controls; forged role parameters cannot grant access; every signed-in account can create and join; loading, sign-out and public missing-config guards; labelled local demo.");
 } finally { Module._load = originalLoad; }

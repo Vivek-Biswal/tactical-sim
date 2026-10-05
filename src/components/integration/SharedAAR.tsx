@@ -18,7 +18,24 @@ function savedKey(id: string) {
 
 export function SharedAAR({ id }: { id: string }) {
   const { user, role, isFirebaseConfigured } = useAuth();
-  return <AuthGuard>{(!isFirebaseConfigured || (user && role)) && <AccountReview key={`${id}:${user?.uid || "local"}:${role || "practice"}`} id={id} instructor={role === "instructor" || !isFirebaseConfigured} />}</AuthGuard>;
+  return <AuthGuard>{(!isFirebaseConfigured || (user && role)) && <RoomReview key={`${id}:${user?.uid || "local"}`} id={id} />}</AuthGuard>;
+}
+
+function RoomReview({ id }: { id: string }) {
+  const { isFirebaseConfigured } = useAuth();
+  const [access, setAccess] = useState<{ instructor: boolean } | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    const controller = new AbortController();
+    backendRequest<{ role: string | null }>(`/exercises/${encodeURIComponent(id)}/membership`, { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) { setAccess({ instructor: value.role === "INSTRUCTOR" }); setError(""); } })
+      .catch(failure => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Unable to check room access."); });
+    return () => controller.abort();
+  }, [id, isFirebaseConfigured, attempt]);
+  if (isFirebaseConfigured && !access) return <AppShell pageTitle="AFTER-ACTION REVIEW"><p role={error ? "alert" : "status"}>{error || "Checking your role in this room…"}</p>{error && <button className={button} onClick={() => setAttempt(value => value + 1)}>Retry</button>}</AppShell>;
+  return <AccountReview id={id} instructor={!isFirebaseConfigured || Boolean(access?.instructor)} />;
 }
 
 function AccountReview({ id, instructor }: { id: string; instructor: boolean }) {

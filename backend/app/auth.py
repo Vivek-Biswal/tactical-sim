@@ -133,9 +133,8 @@ def verify_firebase_identity(token):
             raise TypeError("Invalid Firebase provider metadata")
         if firebase.get("sign_in_provider") == "anonymous":
             raise ValueError("Anonymous accounts cannot join training")
-        role = claims.get("tacticalRole", "commander")
-        if role not in ACCOUNT_ROLES:
-            raise HTTPException(403, "This account has no recognized training role")
+        # Account claims identify users; authority belongs to each room's owner.
+        role = "participant"
         name = claims.get("name") or claims.get("email") or uid
         if not isinstance(name, str) or not name.strip():
             name = uid
@@ -208,7 +207,7 @@ def room_access(session):
 
 
 def own_room(session, identity):
-    require_account_role(identity, "instructor")
+    require_active(identity)
     if not is_demo() and room_access(session)["ownerUid"] != identity.uid:
         raise HTTPException(
             403, "Only the instructor who created this room can control it"
@@ -216,7 +215,7 @@ def own_room(session, identity):
 
 
 def assign_owner(session, identity):
-    require_account_role(identity, "instructor")
+    require_active(identity)
     if not is_demo():
         session.scenario["_access"] = {
             "ownerUid": identity.uid,
@@ -230,8 +229,6 @@ def membership(session, identity):
     require_active(identity)
     if is_demo():
         return None
-    if identity.role == "instructor":
-        own_room(session, identity)
     member = room_access(session)["memberships"].get(identity.uid)
     if member is not None:
         if not isinstance(member, dict) or member.get("role") not in {
@@ -240,17 +237,8 @@ def membership(session, identity):
             *TEAM_ROLES,
         }:
             raise HTTPException(403, "Room membership is invalid")
-        expected = (
-            "instructor"
-            if member["role"] == "INSTRUCTOR"
-            else "commander"
-            if member["role"] == "COMMANDER"
-            else "team"
-        )
-        if expected != identity.role:
-            raise HTTPException(
-                403, "Your account role differs from its fixed role in this room"
-            )
+        if (member["role"] == "INSTRUCTOR") != (room_access(session)["ownerUid"] == identity.uid):
+            raise HTTPException(403, "Room ownership does not match its membership")
     return member
 
 
@@ -258,16 +246,10 @@ def bind_role(session, identity, role):
     require_active(identity)
     if is_demo():
         return
-    allowed = (
-        {"INSTRUCTOR"}
-        if identity.role == "instructor"
-        else {"COMMANDER"}
-        if identity.role == "commander"
-        else TEAM_ROLES
-    )
+    allowed = {"INSTRUCTOR"} if room_access(session)["ownerUid"] == identity.uid else {"COMMANDER", *TEAM_ROLES}
     if role not in allowed:
         raise HTTPException(
-            403, "The requested exercise role is not assigned to your account"
+            403, "Only the room creator can join as Instructor; other users join as trainees"
         )
     existing = membership(session, identity)
     if session.status == "completed" and existing is None:
