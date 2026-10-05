@@ -34,7 +34,7 @@ NEXT_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:8000/api
 NEXT_PUBLIC_WS_BASE_URL=ws://YOUR_LAN_IP:8000
 ```
 
-Set CORS_ORIGINS in the backend process to the exact frontend origin(s), comma separated. Example: http://YOUR_LAN_IP:3100. Default allowed origins cover localhost and 127.0.0.1 on ports 3000 and 3100. WebSocket browser origins are also checked. The backend does not automatically load .env; set environment variables in the launching terminal or use uvicorn --env-file explicitly. A deployed frontend needs an HTTPS API and WSS backend that supports persistent WebSockets. Vercel hosts this Next.js frontend; the Python service runs separately. Run exactly one Uvicorn worker: room state is process-local.
+Set CORS_ORIGINS in the backend process to the exact frontend origin(s), comma separated. The production CHAKRAVYUH origin is `https://chakravyuh01.vercel.app` (no trailing slash or URL path); append it to the existing Render CORS_ORIGINS value and redeploy the backend whenever the website domain changes. Firebase's authorized-domain list is a separate setting and does not authorize backend requests. Example for LAN practice: http://YOUR_LAN_IP:3100. Default allowed origins cover localhost and 127.0.0.1 on ports 3000 and 3100. WebSocket browser origins are also checked. The backend does not automatically load .env; set environment variables in the launching terminal or use uvicorn --env-file explicitly. A deployed frontend needs an HTTPS API and WSS backend that supports persistent WebSockets. Vercel hosts this Next.js frontend; the Python service runs separately. Run exactly one Uvicorn worker: room state is process-local.
 
 ## Timeline
 
