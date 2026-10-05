@@ -1,6 +1,6 @@
 # Tactical map
 
-The Commander exercise uses the React/TypeScript/SVG map in `src/simulation/components/tactical/TacticalMap.tsx`. It follows TACTICAL-SIM's cream and olive design and requires no external map service.
+The Commander exercise uses the React/TypeScript/SVG map in `src/simulation/components/tactical/TacticalMap.tsx`. It follows CHAKRAVYUH's cream and olive design and requires no external map service.
 
 ## Use
 

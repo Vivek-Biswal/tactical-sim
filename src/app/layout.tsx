@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TACTICAL-SIM | Defence Training System",
+  title: "CHAKRAVYUH | Defence Training System",
   description: "Immersive multi-domain decision-making training platform for commanders and field teams.",
 };
 

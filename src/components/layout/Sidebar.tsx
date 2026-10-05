@@ -71,7 +71,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <div className="text-white font-black text-sm tracking-wider leading-tight truncate">TACTICAL-SIM</div>
+            <div className="text-white font-black text-sm tracking-wider leading-tight truncate">CHAKRAVYUH</div>
             <div className="text-[#B69B63] text-[9px] font-bold tracking-[0.15em] leading-tight truncate">DEFENCE TRAINING SYSTEM</div>
           </div>
         )}

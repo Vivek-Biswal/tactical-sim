@@ -99,7 +99,7 @@ export default function LoginPage() {
 
   return <div className="access-page">
     <header className="access-header">
-      <Link href="/" className="access-brand" aria-label="TACTICAL-SIM home"><span className="access-emblem"><Shield size={23} /></span><span>TACTICAL-SIM<small>DECISION-MAKING TRAINER</small></span></Link>
+      <Link href="/" className="access-brand" aria-label="CHAKRAVYUH home"><span className="access-emblem"><Shield size={23} /></span><span>CHAKRAVYUH<small>DECISION-MAKING TRAINER</small></span></Link>
       <Link href="/" className="access-home"><ArrowLeft size={15} /> Back to website</Link>
     </header>
     <main className="access-main">
@@ -156,7 +156,7 @@ export default function LoginPage() {
           </div>
         </section>
       </div>
-      <footer className="access-footer"><span>TACTICAL-SIM · TRAINING WITH PURPOSE</span><span>SIMULATED EXERCISES. SHARED DECISIONS.</span></footer>
+      <footer className="access-footer"><span>CHAKRAVYUH · TRAINING WITH PURPOSE</span><span>SIMULATED EXERCISES. SHARED DECISIONS.</span></footer>
     </main>
   </div>;
 }

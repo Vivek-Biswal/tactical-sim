@@ -7,7 +7,7 @@ from app.persistence import persistence
 from app.scenario_engine.engine import engine_manager
 from app.websocket.manager import ws_manager
 
-logger = logging.getLogger("tactical-sim.scheduler")
+logger = logging.getLogger("chakravyuh.scheduler")
 
 
 class SimulationScheduler:

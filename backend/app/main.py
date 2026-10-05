@@ -111,7 +111,7 @@ async def health():
 
     return {
         "status": "ok",
-        "service": "tactical-sim",
+        "service": "chakravyuh",
         "storage": "firestore" if persistence.store else "in-memory",
         "persistenceStatus": persistence.state,
         "authMode": settings.AUTH_MODE,

@@ -1,6 +1,6 @@
 # Varun backend work-file completion
 
-Source: the user-supplied `Varun-work.txt`, “TACTICAL-SIM — PERSON 3 WORK FILE”, Backend + Scenario Engine. This checklist maps its requirements to the existing application and incremental additions. The work-file examples are conceptual; the integrated frontend's `/api` paths, lower-case state fields and existing socket commands remain supported.
+Source: the user-supplied `Varun-work.txt`, the original Person 3 work file, Backend + Scenario Engine. This checklist maps its requirements to the existing application and incremental additions. The work-file examples are conceptual; the integrated frontend's `/api` paths, lower-case state fields and existing socket commands remain supported.
 
 ## Scope and architecture
 

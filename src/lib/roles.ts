@@ -34,7 +34,7 @@ function applicationPath(path: string): string | null {
     // Decode before normalising so encoded separators and '..' cannot bypass a role prefix.
     const decoded = decodeURIComponent(path.split(/[?#]/, 1)[0]);
     if (decoded.startsWith("//") || /[\\%\u0000-\u001f\u007f]/.test(decoded)) return null;
-    return new URL(decoded, "https://tactical-sim.invalid").pathname;
+    return new URL(decoded, "https://chakravyuh.invalid").pathname;
   } catch {
     return null;
   }

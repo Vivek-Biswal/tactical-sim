@@ -37,7 +37,7 @@ export const isFirebaseConfigured = missingFirebaseConfiguration.length === 0;
 if (!isFirebaseConfigured && typeof window !== "undefined") {
   // Report names only. Never print credential values.
   console.warn(
-    "[TACTICAL-SIM] Firebase sign-in is unavailable. Missing frontend configuration:",
+    "[CHAKRAVYUH] Firebase sign-in is unavailable. Missing frontend configuration:",
     missingFirebaseConfiguration.join(", "),
     "Set these variables in the Vercel Production environment and rebuild, or in root .env.local and restart locally."
   );

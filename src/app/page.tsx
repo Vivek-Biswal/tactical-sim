@@ -66,7 +66,7 @@ export default function LandingPage() {
             <div className="flex items-center gap-3">
               <Shield className="h-10 w-10 text-[#D8C9A7]" />
               <div className="flex flex-col">
-                <span className="font-extrabold text-xl tracking-wider text-[#FFFFFF] leading-tight">TACTICAL-SIM</span>
+                <span className="font-extrabold text-xl tracking-wider text-[#FFFFFF] leading-tight">CHAKRAVYUH</span>
                 <span className="text-[10px] font-bold tracking-[0.2em] text-[#A88B52] leading-tight">DEFENCE TRAINING SYSTEM</span>
               </div>
             </div>
@@ -277,12 +277,12 @@ export default function LandingPage() {
           <div className="flex items-center gap-4">
             <Shield className="h-8 w-8 text-[#D8C9A7]" />
             <div className="flex flex-col">
-              <span className="font-extrabold text-xl tracking-wider text-[#FFFFFF] leading-tight">TACTICAL-SIM</span>
+              <span className="font-extrabold text-xl tracking-wider text-[#FFFFFF] leading-tight">CHAKRAVYUH</span>
               <span className="text-[10px] font-bold tracking-[0.2em] text-[#A88B52] leading-tight">DEFENCE TRAINING SYSTEM</span>
             </div>
           </div>
           <p className="text-[#D8C9A7] text-sm font-medium tracking-wide">
-            &copy; {new Date().getFullYear()} TACTICAL-SIM INC. ALL RIGHTS RESERVED.
+            &copy; {new Date().getFullYear()} CHAKRAVYUH INC. ALL RIGHTS RESERVED.
           </p>
           <div className="flex gap-6 text-xs font-bold tracking-widest text-[#D8C9A7]">
             <a href="#" className="hover:text-[#FFFFFF] transition-colors">PRIVACY POLICY</a>

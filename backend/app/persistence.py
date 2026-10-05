@@ -14,7 +14,7 @@ from copy import deepcopy
 
 from app.config import settings
 
-logger = logging.getLogger("tactical-sim.persistence")
+logger = logging.getLogger("chakravyuh.persistence")
 CHUNK_BYTES = 450_000
 
 

@@ -2,7 +2,7 @@
 
 This document records the previous administrator-assigned policy. The current application uses [room roles](room-roles.md): every signed-in user can create a room as Instructor and join another room as Trainee. Legacy `tacticalRole` claims are ignored. The instructions below no longer determine training access.
 
-TACTICAL-SIM assigns account permissions through the signed Firebase ID-token claim `tacticalRole`. Browser storage, a login form, a URL and a Firestore profile cannot grant instructor access.
+CHAKRAVYUH assigns account permissions through the signed Firebase ID-token claim `tacticalRole`. Browser storage, a login form, a URL and a Firestore profile cannot grant instructor access.
 
 | Account claim | Access |
 | --- | --- |

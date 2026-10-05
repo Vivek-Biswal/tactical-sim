@@ -39,7 +39,7 @@ async function upsertFirestoreUser(user: User): Promise<void> {
     });
   } catch (err) {
     // Firestore failure should never break the auth flow
-    console.warn("[TACTICAL-SIM] Firestore user record update failed:", err);
+    console.warn("[CHAKRAVYUH] Firestore user record update failed:", err);
   }
 }
 

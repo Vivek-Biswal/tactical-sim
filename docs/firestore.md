@@ -4,7 +4,7 @@
 
 ## Provisioned database
 
-Project: `tactical-sim-d3bf4` (TACTICAL-SIM). Default database: `(default)`, Standard edition, Native mode, Mumbai `asia-south1`.
+Project: `tactical-sim-d3bf4` (CHAKRAVYUH). Default database: `(default)`, Standard edition, Native mode, Mumbai `asia-south1`.
 
 Rules and indexes are deployed. The browser may read and update only its own validated `users/{uid}` profile. Profile creation time is immutable; login timestamps use server time. All exercise data is denied to browser SDKs. Backend IAM credentials bypass these rules.
 

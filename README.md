@@ -1,4 +1,4 @@
-# TACTICAL-SIM
+# CHAKRAVYUH
 
 Immersive decision-making training for degraded communication environments. Problem statement 26248.
 

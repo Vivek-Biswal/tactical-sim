@@ -2,7 +2,7 @@ import os
 
 
 class Settings:
-    PROJECT_NAME = "TACTICAL-SIM"
+    PROJECT_NAME = "CHAKRAVYUH"
     VERSION = "2.0.0"
     API_PREFIX = "/api"
     HOST = os.getenv("HOST", "127.0.0.1")
